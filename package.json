@@ -1,0 +1,38 @@
+{
+  "name": "ai-growth-path-sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.2",
+    "@rollup/rollup-linux-x64-gnu": "^4.62.3",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "next": "16.1.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.3",
+    "@types/react-dom": "^19.0.2",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "16.1.6",
+    "postcss": "^8.4.49",
+    "prisma": "6.19.2",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

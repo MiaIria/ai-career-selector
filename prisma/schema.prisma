@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String           @id @default(cuid())
+  feishuOpenId      String?          @unique
+  name              String?
+  avatarUrl         String?
+  accessToken       String?
+  refreshToken      String?
+  tokenExpiresAt    DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  profile           StudentProfile?
+  simulationSnapshot PathSimulationSnapshot?
+  decision          DecisionRecord?
+  plan              MonthlyPlan?
+  reviews           WeeklyReview[]
+  feishuConnections FeishuResource[]
+}
+
+model PathSimulationSnapshot {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  simulations    Json
+  generationMode String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StudentProfile {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school                String?
+  major                 String
+  grade                 String
+  academicStanding      String?
+  interests             Json
+  skills                Json
+  experiences           Json
+  values                Json
+  targetCities          Json
+  weeklyHours           Int
+  monthlyBudget         Int
+  constraints           Json
+  selfStatements        Json
+  evidence              Json
+  initialClarityScore   Int?
+  contradictions        Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model DecisionRecord {
+  id                String   @id @default(cuid())
+  requestId         String   @unique
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  selectedTrack     String
+  selectedSubtrack  String
+  aiRanking         Json
+  comparison        Json
+  userReason        String?
+  clarityScoreAfter Int?
+  committedAt       DateTime @default(now())
+}
+
+model MonthlyPlan {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track       String
+  subtrack    String
+  version     Int      @default(1)
+  startDate   DateTime
+  endDate     DateTime
+  rationale   String
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tasks       Task[]
+}
+
+model Task {
+  id               String      @id @default(cuid())
+  planId           String
+  plan             MonthlyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  week             Int
+  title            String
+  description      String
+  estimatedMinutes Int
+  dueDate          DateTime
+  evidenceRequired String
+  status           String      @default("todo")
+  completionProof  String?
+  adoptedAt        DateTime?
+  completedAt      DateTime?
+  feishuRecordId   String?
+  feishuEventId    String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
+
+model WeeklyReview {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId         String
+  week           Int
+  completionRate Int
+  changes        Json
+  blockers       Json
+  reflection     String?
+  adjustmentDiff Json
+  createdAt      DateTime @default(now())
+}
+
+model FeishuResource {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resourceType String
+  resourceKey  String
+  resourceId   String
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, resourceType, resourceKey])
+}
