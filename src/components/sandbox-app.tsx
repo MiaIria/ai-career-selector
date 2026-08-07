@@ -22,6 +22,13 @@ import {
   Target,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  createQuestionnaire,
+  DIRECTION_META,
+  groupsFor,
+  QUESTION_GROUPS,
+  type QuestionnaireGroup,
+} from "@/lib/profile-questionnaire";
 import type {
   MonthlyTask,
   PathNode,
@@ -43,38 +50,38 @@ const TRACK_META: Record<
 const initialProfile: StudentProfileInput = {
   school: "",
   major: "",
-  grade: "大二",
-  academicStanding: "中等",
+  grade: "",
+  academicStanding: "",
   interests: [],
   skills: [],
   experiences: [],
   values: [],
   targetCities: [],
-  weeklyHours: 12,
-  monthlyBudget: 800,
+  weeklyHours: 0,
+  monthlyBudget: 0,
   constraints: [],
   currentConfusion: "",
+  questionnaire: createQuestionnaire(),
 };
 
-const options = {
-  interests: ["专业研究", "公共服务", "互联网产品", "数据技术", "内容创作", "商业实践"],
-  skills: ["写作表达", "数据分析", "编程技术", "组织协调", "视觉设计", "公开演讲"],
-  values: ["稳定优先", "成长优先", "收入优先", "自由度优先", "社会价值", "地域优先"],
-  constraints: ["必须兼顾课程", "经济预算有限", "暂不考虑异地", "缺少相关经历", "家庭期待影响"],
-};
-
-function toggleItem(
-  values: string[],
-  item: string,
-  setter: (values: string[]) => void,
-) {
-  setter(values.includes(item) ? values.filter((value) => value !== item) : [...values, item]);
+function normalizeProfile(profile?: Partial<StudentProfileInput>): StudentProfileInput {
+  const savedQuestionnaire = profile?.questionnaire;
+  return {
+    ...initialProfile,
+    ...profile,
+    questionnaire: {
+      ...createQuestionnaire(),
+      ...savedQuestionnaire,
+      answers: savedQuestionnaire?.answers ?? {},
+    },
+  };
 }
 
 const GUEST_PROGRESS_KEY = "growth-sandbox-guest-progress";
 const PENDING_DECISION_KEY = "growth-sandbox-pending-decision";
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 type Stage = "welcome" | "profile" | "simulation" | "plan";
+type ProfilePhase = "routing" | "groups";
 
 interface SavedBundle {
   profile: StudentProfileInput;
@@ -127,6 +134,9 @@ export function SandboxApp() {
   const [decisionSaved, setDecisionSaved] = useState(false);
   const [progressReady, setProgressReady] = useState(false);
   const [savedBundle, setSavedBundle] = useState<SavedBundle | null>(null);
+  const [profilePhase, setProfilePhase] = useState<ProfilePhase>("routing");
+  const [activeGroup, setActiveGroup] = useState<QuestionnaireGroup | null>(null);
+  const [visitedGroups, setVisitedGroups] = useState<QuestionnaireGroup[]>([]);
 
   const navigateTo = useCallback((next: Stage) => {
     window.history.pushState({ stage: next }, "", `#${next}`);
@@ -164,7 +174,7 @@ export function SandboxApp() {
         generationModeToSave,
         requestId,
       );
-      setProfile(bundle.profile);
+      setProfile(normalizeProfile(bundle.profile));
       setSimulations(bundle.simulations);
       setGenerationMode(bundle.generationMode);
       setSelectedTrack(bundle.decision.selectedTrack);
@@ -195,7 +205,7 @@ export function SandboxApp() {
       return;
     }
     setDecisionSaving(true);
-    setProfile(pending.profile);
+    setProfile(normalizeProfile(pending.profile));
     setSelectedTrack(pending.selectedTrack);
     try {
       let restoredSimulations = pending.simulations ?? [];
@@ -245,12 +255,18 @@ export function SandboxApp() {
             simulations: PathSimulation[];
             selectedTrack: TrackKey | null;
             generationMode: string;
+            profilePhase?: ProfilePhase;
+            activeGroup?: QuestionnaireGroup | null;
+            visitedGroups?: QuestionnaireGroup[];
           };
           if (saved.expiresAt > Date.now()) {
-            setProfile(saved.profile);
+            setProfile(normalizeProfile(saved.profile));
             setSimulations(saved.simulations ?? []);
             setSelectedTrack(saved.selectedTrack ?? null);
             setGenerationMode(saved.generationMode ?? "");
+            setProfilePhase(saved.profilePhase ?? "routing");
+            setActiveGroup(saved.activeGroup ?? null);
+            setVisitedGroups(saved.visitedGroups ?? []);
             setStage(saved.stage);
           } else {
             window.localStorage.removeItem(GUEST_PROGRESS_KEY);
@@ -293,18 +309,76 @@ export function SandboxApp() {
         simulations,
         selectedTrack,
         generationMode,
+        profilePhase,
+        activeGroup,
+        visitedGroups,
       }),
     );
-  }, [generationMode, profile, progressReady, selectedTrack, simulations, stage]);
+  }, [activeGroup, generationMode, profile, profilePhase, progressReady, selectedTrack, simulations, stage, visitedGroups]);
 
   const selectedSimulation = useMemo(
     () => simulations.find((item) => item.track === selectedTrack),
     [simulations, selectedTrack],
   );
 
+  const visibleGroups = useMemo(
+    () => groupsFor(profile.questionnaire.excludedDirections),
+    [profile.questionnaire.excludedDirections],
+  );
+  const hasVisitedAllGroups = visibleGroups.every((group) => visitedGroups.includes(group));
+
+  function updateQuestionnaire(patch: Partial<StudentProfileInput["questionnaire"]>) {
+    setProfile((current) => ({
+      ...current,
+      questionnaire: { ...current.questionnaire, ...patch },
+    }));
+  }
+
+  function updateAnswer(id: string, value: string, multiple = false) {
+    setProfile((current) => {
+      const currentAnswers = current.questionnaire.answers;
+      const values = currentAnswers[id] ?? [];
+      const nextValues = multiple
+        ? (values.includes(value) ? values.filter((item) => item !== value) : [...values, value])
+        : [value];
+      return {
+        ...current,
+        questionnaire: {
+          ...current.questionnaire,
+          answers: { ...currentAnswers, [id]: nextValues },
+        },
+      };
+    });
+  }
+
+  function enterGroups() {
+    const { difficultyRanking, excludedDirections, exclusionChoiceMade, futureDirection } = profile.questionnaire;
+    if (difficultyRanking.length !== 3 || !exclusionChoiceMade || !futureDirection || excludedDirections.length > 2) {
+      setMessage("请完成前三道必答题后再进入题组。");
+      return;
+    }
+    setMessage("");
+    setProfilePhase("groups");
+    const firstGroup = activeGroup && visibleGroups.includes(activeGroup) ? activeGroup : visibleGroups[0] ?? null;
+    setActiveGroup(firstGroup);
+    setVisitedGroups(firstGroup ? [firstGroup] : []);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function restartQuestionnaire() {
+    const confirmed = window.confirm("确定重新答题吗？你将从前三道必答题的第一题开始，当前所有填写内容都会清空。");
+    if (!confirmed) return;
+    setProfile(initialProfile);
+    setProfilePhase("routing");
+    setActiveGroup(null);
+    setVisitedGroups([]);
+    setMessage("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function generateSimulations() {
-    if (!profile.major.trim() || !profile.currentConfusion.trim()) {
-      setMessage("请至少填写专业和当前最困惑的问题。");
+    if (profilePhase !== "groups") {
+      setMessage("请先完成前三道必答题并进入对应题组。");
       return;
     }
     setLoading(true);
@@ -357,7 +431,7 @@ export function SandboxApp() {
 
   function openSavedBundle() {
     if (!savedBundle) return;
-    setProfile(savedBundle.profile);
+    setProfile(normalizeProfile(savedBundle.profile));
     setSimulations(savedBundle.simulations);
     setGenerationMode(savedBundle.generationMode);
     setSelectedTrack(savedBundle.decision.selectedTrack);
@@ -499,48 +573,46 @@ export function SandboxApp() {
               <p>当前MVP不上传成绩单或简历。证书、作品和项目结果将在下一版支持。</p>
             </div>
           </aside>
-          <div className="form-card">
-            <div className="form-section">
-              <div className="form-heading"><span>01</span><div><h3>基本情况</h3><p>决定路径规则和时间窗口</p></div></div>
-              <div className="field-grid">
-                <label><span>学校（选填）</span><input value={profile.school} onChange={(e) => setProfile({ ...profile, school: e.target.value })} placeholder="例如：某某大学" /></label>
-                <label><span>专业 *</span><input value={profile.major} onChange={(e) => setProfile({ ...profile, major: e.target.value })} placeholder="例如：工商管理" /></label>
-                <label><span>年级</span><select value={profile.grade} onChange={(e) => setProfile({ ...profile, grade: e.target.value })}><option>大二</option><option>大三</option><option>大四</option></select></label>
-                <label><span>当前学业水平</span><select value={profile.academicStanding} onChange={(e) => setProfile({ ...profile, academicStanding: e.target.value })}><option>前20%</option><option>中上</option><option>中等</option><option>需要提升</option></select></label>
-              </div>
-            </div>
-
-            <ChoiceSection title="兴趣方向" description="选择真正愿意持续投入的内容" items={options.interests} selected={profile.interests} onChange={(values) => setProfile({ ...profile, interests: values })} />
-            <ChoiceSection title="已有能力" description="只选择能举出实际例子的能力" items={options.skills} selected={profile.skills} onChange={(values) => setProfile({ ...profile, skills: values })} />
-            <ChoiceSection title="决策偏好" description="发生冲突时，你优先保留什么" items={options.values} selected={profile.values} onChange={(values) => setProfile({ ...profile, values })} />
-
-            <div className="form-section">
-              <div className="form-heading"><span>05</span><div><h3>经历与现实约束</h3><p>避免生成脱离实际的建议</p></div></div>
-              <label className="wide-field">
-                <span>代表性经历（用分号分隔）</span>
-                <textarea
-                  value={profile.experiences.join("；")}
-                  onChange={(e) => setProfile({ ...profile, experiences: e.target.value.split(/[；;]/).map((v) => v.trim()).filter(Boolean) })}
-                  placeholder="例如：参加校级创新项目并负责用户调研；运营过校园公众号"
-                />
-              </label>
-              <ChoiceSection compact title="现实约束" description="" items={options.constraints} selected={profile.constraints} onChange={(values) => setProfile({ ...profile, constraints: values })} />
-              <div className="field-grid sliders">
-                <label><span>每周可投入时间：<strong>{profile.weeklyHours}小时</strong></span><input type="range" min="2" max="40" value={profile.weeklyHours} onChange={(e) => setProfile({ ...profile, weeklyHours: Number(e.target.value) })} /></label>
-                <label><span>每月可投入预算：<strong>¥{profile.monthlyBudget}</strong></span><input type="range" min="0" max="5000" step="100" value={profile.monthlyBudget} onChange={(e) => setProfile({ ...profile, monthlyBudget: Number(e.target.value) })} /></label>
-              </div>
-              <label className="wide-field">
-                <span>你现在最困惑的问题 *</span>
-                <textarea value={profile.currentConfusion} onChange={(e) => setProfile({ ...profile, currentConfusion: e.target.value })} placeholder="例如：我喜欢产品和内容创作，但担心直接就业竞争力不足，也不确定考研能带来什么。" />
-              </label>
-            </div>
+          <div className="form-card questionnaire-card">
+            {profilePhase === "routing" ? (
+              <>
+                <div className="form-section">
+                  <div className="form-heading"><span>01</span><div><h3>基本情况（选填）</h3><p>填写越多，后续的路径分析越准确；信息仅用于提供决策建议。</p></div></div>
+                  <div className="field-grid">
+                    <label><span>学校层次</span><select value={profile.school} onChange={(e) => setProfile({ ...profile, school: e.target.value })}><option value="">暂不填写</option><option>985</option><option>211</option><option>双一流</option><option>普通本科</option></select></label>
+                    <label><span>专业</span><input value={profile.major} onChange={(e) => setProfile({ ...profile, major: e.target.value })} placeholder="例如：工商管理" /></label>
+                    <label><span>当前学业时期</span><select value={profile.grade} onChange={(e) => setProfile({ ...profile, grade: e.target.value })}><option value="">暂不填写</option>{["大一上", "大一下", "大二上", "大二下", "大三上", "大三下", "大四上", "大四下"].map((item) => <option key={item}>{item}</option>)}</select></label>
+                    <label><span>当前学业水平</span><select value={profile.academicStanding} onChange={(e) => setProfile({ ...profile, academicStanding: e.target.value })}><option value="">暂不填写</option>{["前5%", "前10%", "前20%", "普通", "较低"].map((item) => <option key={item}>{item}</option>)}</select></label>
+                  </div>
+                </div>
+                <div className="form-section">
+                  <div className="form-heading"><span>02</span><div><h3>先完成三道必答题</h3><p>它们只用于确定你需要回答的题组，不直接替你作出决定。</p></div></div>
+                  <div className="question-card required-question">
+                    <p><b>1.</b> 请按你认为的综合难度，从高到低依次点击：{profile.questionnaire.difficultyRanking.length}/3</p>
+                    <div className="choice-grid">{["考/保研", "考公", "就业"].map((item) => <button type="button" className={profile.questionnaire.difficultyRanking.includes(item) ? "active" : ""} key={item} onClick={() => { const current = profile.questionnaire.difficultyRanking; updateQuestionnaire({ difficultyRanking: current.includes(item) ? current.filter((value) => value !== item) : [...current, item] }); }}><span className="rank-number">{profile.questionnaire.difficultyRanking.indexOf(item) + 1 || "—"}</span>{item}</button>)}</div>
+                    <small>再次点击可取消；第一个点击的是你认为最难的方向。</small>
+                  </div>
+                  <div className="question-card required-question">
+                    <p><b>2.</b> 你未来大概率会成为？</p>
+                    <div className="choice-grid">{["上班（包含公务员和事业单位）", "创业", "学者或研究人员"].map((item) => <button type="button" className={profile.questionnaire.futureDirection === item ? "active" : ""} key={item} onClick={() => updateQuestionnaire({ futureDirection: item })}>{item}</button>)}</div>
+                  </div>
+                  <div className="question-card required-question">
+                    <p><b>3.</b> 排除你目前几乎不可能选择的方向（可多选，最多两项）</p>
+                    <div className="choice-grid">{["考/保研", "考公", "就业"].map((item) => <button type="button" className={profile.questionnaire.excludedDirections.includes(item) ? "active" : ""} key={item} onClick={() => { const current = profile.questionnaire.excludedDirections; updateQuestionnaire({ exclusionChoiceMade: true, excludedDirections: current.includes(item) ? current.filter((value) => value !== item) : current.length < 2 ? [...current, item] : current }); }}>{item}</button>)}<button type="button" className={profile.questionnaire.exclusionChoiceMade && profile.questionnaire.excludedDirections.length === 0 ? "active" : ""} onClick={() => updateQuestionnaire({ exclusionChoiceMade: true, excludedDirections: [] })}>都不排除</button></div>
+                    <small>被排除的方向不会展示相关题组，也不会参与主路径推荐；自由发展题组始终保留。</small>
+                  </div>
+                </div>
+                <div className="form-footer"><span>完成后将锁定前三题，并按你的排除项生成专属题组。</span><button className="primary-button" type="button" onClick={enterGroups}>进入专属题组 <ArrowRight size={18} /></button></div>
+              </>
+            ) : (
+              <>
+                <div className="group-toolbar"><div><span className="eyebrow">专属题组</span><h3>按自己的节奏回答或跳过</h3><p>自由发展始终必答；其他题组由前三题的排除结果决定。填写越多，分析越准确。</p></div><button className="secondary-button" type="button" onClick={restartQuestionnaire}><RefreshCw size={16} /> 重新答题</button></div>
+                <div className="group-tabs">{visibleGroups.map((group) => <button type="button" className={activeGroup === group ? "active" : ""} key={group} onClick={() => { setActiveGroup(group); setVisitedGroups((current) => current.includes(group) ? current : [...current, group]); }}>{DIRECTION_META[group].title}{group === "independent" && <em>始终必答</em>}</button>)}</div>
+                {activeGroup && <div className="form-section group-question-list"><div className="form-heading"><span>{String(visibleGroups.indexOf(activeGroup) + 1).padStart(2, "0")}</span><div><h3>{DIRECTION_META[activeGroup].title}</h3><p>每道题均可跳过；答案仅作为路径推荐的自述依据。</p></div></div>{QUESTION_GROUPS[activeGroup].map((question, index) => <div className="question-card" key={question.id}><p><b>{index + 1}.</b> {question.prompt}{question.multiple && <small>（可多选）</small>}</p><div className="choice-grid">{question.options.map((item) => <button type="button" className={(profile.questionnaire.answers[question.id] ?? []).includes(item) ? "active" : ""} key={item} onClick={() => updateAnswer(question.id, item, question.multiple)}>{item}</button>)}</div><button className="skip-link" type="button" onClick={() => updateAnswer(question.id, "", false)}>跳过此题</button></div>)}{activeGroup === "independent" && <div className="question-card open-question"><p><b>{QUESTION_GROUPS.independent.length + 1}.</b> 你目前最大的迷茫与焦虑是什么？</p><small>请用一两句话概括，也可以详细描述。本题可跳过。</small><textarea value={profile.currentConfusion} onChange={(event) => setProfile({ ...profile, currentConfusion: event.target.value })} placeholder="例如：我担心直接就业竞争力不足，也不确定继续读研是否值得。" /><button className="skip-link" type="button" onClick={() => setProfile({ ...profile, currentConfusion: "" })}>跳过此题</button></div>}</div>}
+                {hasVisitedAllGroups ? <div className="form-footer"><span>你可以继续返回题组补充信息；开放题留空不会影响生成。</span><button className="primary-button" onClick={generateSimulations} disabled={loading}>{loading ? <><LoaderCircle className="spin" size={18} /> 正在构建沙盘</> : <>生成四轨推演 <ArrowRight size={18} /></>}</button></div> : <div className="form-footer"><span>请依次浏览其余题组；每个题组中的问题都可以跳过。</span><button className="secondary-button" type="button" onClick={() => { const nextGroup = visibleGroups.find((group) => !visitedGroups.includes(group)); if (nextGroup) { setActiveGroup(nextGroup); setVisitedGroups((current) => [...current, nextGroup]); } }}>继续下一题组 <ArrowRight size={16} /></button></div>}
+              </>
+            )}
             {message && <div className="error-message"><CircleAlert size={17} />{message}</div>}
-            <div className="form-footer">
-              <span>提交后将同时生成四条路径，不会替你自动做决定。</span>
-              <button className="primary-button" onClick={generateSimulations} disabled={loading}>
-                {loading ? <><LoaderCircle className="spin" size={18} /> 正在构建沙盘</> : <>生成四轨推演 <ArrowRight size={18} /></>}
-              </button>
-            </div>
           </div>
         </section>
       )}
@@ -644,36 +716,6 @@ export function SandboxApp() {
         </section>
       )}
     </main>
-  );
-}
-
-function ChoiceSection({
-  title,
-  description,
-  items,
-  selected,
-  onChange,
-  compact = false,
-}: {
-  title: string;
-  description: string;
-  items: string[];
-  selected: string[];
-  onChange: (values: string[]) => void;
-  compact?: boolean;
-}) {
-  return (
-    <div className={`form-section ${compact ? "compact" : ""}`}>
-      {!compact && <div className="form-heading"><span>{String(["兴趣方向", "已有能力", "决策偏好"].indexOf(title) + 2).padStart(2, "0")}</span><div><h3>{title}</h3><p>{description}</p></div></div>}
-      {compact && <label className="choice-label">{title}</label>}
-      <div className="choice-grid">
-        {items.map((item) => (
-          <button type="button" className={selected.includes(item) ? "active" : ""} onClick={() => toggleItem(selected, item, onChange)} key={item}>
-            {selected.includes(item) && <Check size={14} />}{item}
-          </button>
-        ))}
-      </div>
-    </div>
   );
 }
 

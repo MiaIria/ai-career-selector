@@ -9,18 +9,25 @@ import { getSessionUserId } from "@/lib/session";
 
 const ProfileSchema = z.object({
   school: z.string(),
-  major: z.string().min(1),
-  grade: z.string().min(1),
+  major: z.string(),
+  grade: z.string(),
   academicStanding: z.string(),
   interests: z.array(z.string()),
   skills: z.array(z.string()),
   experiences: z.array(z.string()),
   values: z.array(z.string()),
   targetCities: z.array(z.string()),
-  weeklyHours: z.number().min(1).max(80),
+  weeklyHours: z.number().min(0).max(80),
   monthlyBudget: z.number().min(0),
   constraints: z.array(z.string()),
   currentConfusion: z.string(),
+  questionnaire: z.object({
+    difficultyRanking: z.array(z.enum(["考/保研", "考公", "就业"])).length(3),
+    excludedDirections: z.array(z.enum(["考/保研", "考公", "就业"])).max(2),
+    exclusionChoiceMade: z.literal(true),
+    futureDirection: z.enum(["上班（包含公务员和事业单位）", "创业", "学者或研究人员"]),
+    answers: z.record(z.array(z.string())),
+  }),
 });
 
 const TrackSchema = z.enum(["further_study", "public_sector", "employment", "independent"]);
@@ -220,7 +227,7 @@ function profileData(profile: z.infer<typeof ProfileSchema>) {
     weeklyHours: profile.weeklyHours,
     monthlyBudget: profile.monthlyBudget,
     constraints: profile.constraints,
-    selfStatements: { currentConfusion: profile.currentConfusion },
+    selfStatements: { currentConfusion: profile.currentConfusion, questionnaire: profile.questionnaire },
     evidence: [],
   };
 }
@@ -237,7 +244,7 @@ async function readCurrentBundle(userId: string) {
   ]);
   if (!profile || !decision || !plan) return null;
 
-  const selfStatements = profile.selfStatements as { currentConfusion?: string } | null;
+  const selfStatements = profile.selfStatements as { currentConfusion?: string; questionnaire?: z.infer<typeof ProfileSchema>["questionnaire"] } | null;
   const profileInput: z.infer<typeof ProfileSchema> = {
     school: profile.school ?? "",
     major: profile.major,
@@ -252,6 +259,13 @@ async function readCurrentBundle(userId: string) {
     monthlyBudget: profile.monthlyBudget,
     constraints: profile.constraints as string[],
     currentConfusion: selfStatements?.currentConfusion ?? "",
+    questionnaire: selfStatements?.questionnaire ?? {
+      difficultyRanking: ["考/保研", "考公", "就业"],
+      excludedDirections: [],
+      exclusionChoiceMade: true,
+      futureDirection: "上班（包含公务员和事业单位）",
+      answers: {},
+    },
   };
   let storedSimulations = simulationSnapshot?.simulations;
   let storedGenerationMode = simulationSnapshot?.generationMode;

@@ -1,3 +1,5 @@
+import type { QuestionnaireData } from "@/lib/profile-questionnaire";
+
 export type TrackKey = "further_study" | "public_sector" | "employment" | "independent";
 export type Feasibility = "high" | "medium" | "low";
 export type EvidenceKind = "self_report" | "user_proof" | "external_rule";
@@ -16,6 +18,7 @@ export interface StudentProfileInput {
   monthlyBudget: number;
   constraints: string[];
   currentConfusion: string;
+  questionnaire: QuestionnaireData;
 }
 
 export interface EvidenceItem {
