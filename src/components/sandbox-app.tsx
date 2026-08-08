@@ -7,21 +7,19 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   Check,
-  ChevronDown,
   ChevronRight,
   CircleAlert,
   ExternalLink,
   FileCheck2,
   Landmark,
-  LoaderCircle,
   Network,
   RefreshCw,
   Rocket,
   ShieldCheck,
   Sparkles,
-  Target,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { EDUCATION_PATHS, EDUCATION_STRATEGIES, TRACK_OVERVIEWS, type EducationPathKey } from "@/lib/four-track-content";
 import {
   createQuestionnaire,
   DIRECTION_META,
@@ -31,7 +29,6 @@ import {
 } from "@/lib/profile-questionnaire";
 import type {
   MonthlyTask,
-  PathNode,
   PathSimulation,
   StudentProfileInput,
   TrackKey,
@@ -120,23 +117,22 @@ export function SandboxApp() {
   const [profile, setProfile] = useState(initialProfile);
   const [simulations, setSimulations] = useState<PathSimulation[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<TrackKey | null>(null);
-  const [expandedTrack, setExpandedTrack] = useState<TrackKey | null>(null);
-  const [expandedNode, setExpandedNode] = useState<string | null>(null);
   const [tasks, setTasks] = useState<MonthlyTask[]>([]);
-  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [generationMode, setGenerationMode] = useState("");
   const [session, setSession] = useState<{
     authenticated: boolean;
     user?: { name?: string };
   }>({ authenticated: false });
-  const [decisionSaving, setDecisionSaving] = useState(false);
   const [decisionSaved, setDecisionSaved] = useState(false);
   const [progressReady, setProgressReady] = useState(false);
   const [savedBundle, setSavedBundle] = useState<SavedBundle | null>(null);
   const [profilePhase, setProfilePhase] = useState<ProfilePhase>("routing");
   const [activeGroup, setActiveGroup] = useState<QuestionnaireGroup | null>(null);
   const [visitedGroups, setVisitedGroups] = useState<QuestionnaireGroup[]>([]);
+  const [simulationView, setSimulationView] = useState<"overview" | "path-simulation">("overview");
+  const [simulationScrollY, setSimulationScrollY] = useState(0);
+  const [educationPath, setEducationPath] = useState<EducationPathKey>("exam");
 
   const navigateTo = useCallback((next: Stage) => {
     window.history.pushState({ stage: next }, "", `#${next}`);
@@ -164,7 +160,6 @@ export function SandboxApp() {
     simulationsToSave: PathSimulation[],
     generationModeToSave: string,
   ) => {
-    setDecisionSaving(true);
     setMessage("");
     try {
       const bundle = await persistCompleteBundle(
@@ -187,9 +182,7 @@ export function SandboxApp() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "完整方案保存失败");
-    } finally {
-      setDecisionSaving(false);
-    }
+    } finally { /* 保存状态由提交页面在后续个人化决策模块中呈现。 */ }
   }, [navigateTo]);
 
   const resumePendingDecision = useCallback(async (pending: {
@@ -204,7 +197,6 @@ export function SandboxApp() {
       window.localStorage.removeItem(PENDING_DECISION_KEY);
       return;
     }
-    setDecisionSaving(true);
     setProfile(normalizeProfile(pending.profile));
     setSelectedTrack(pending.selectedTrack);
     try {
@@ -227,7 +219,6 @@ export function SandboxApp() {
       if (!chosen) throw new Error("无法恢复登录前选择的路径");
       setSimulations(restoredSimulations);
       setGenerationMode(restoredMode);
-      setExpandedTrack(pending.selectedTrack);
       await saveDecisionAndContinue(
         chosen,
         pending.requestId,
@@ -238,7 +229,6 @@ export function SandboxApp() {
     } catch (error) {
       navigateTo("simulation");
       setMessage(error instanceof Error ? error.message : "登录前决策恢复失败");
-      setDecisionSaving(false);
     }
   }, [navigateTo, saveDecisionAndContinue]);
 
@@ -381,52 +371,9 @@ export function SandboxApp() {
       setMessage("请先完成前三道必答题并进入对应题组。");
       return;
     }
-    setLoading(true);
     setMessage("");
-    try {
-      const response = await fetch("/api/simulations/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "生成失败");
-      setSimulations(data.simulations);
-      setGenerationMode(data.mode);
-      navigateTo("simulation");
-      setExpandedTrack(data.simulations[0]?.track ?? null);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "生成失败，请稍后重试。");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function commitDecision() {
-    if (!selectedSimulation) return;
-    const requestId = crypto.randomUUID();
-    if (!session.authenticated) {
-      window.localStorage.setItem(
-        PENDING_DECISION_KEY,
-        JSON.stringify({
-          profile,
-          selectedTrack,
-          simulations,
-          generationMode,
-          requestId,
-          expiresAt: Date.now() + THIRTY_DAYS_MS,
-        }),
-      );
-      window.location.href = "/api/auth/feishu";
-      return;
-    }
-    await saveDecisionAndContinue(
-      selectedSimulation,
-      requestId,
-      profile,
-      simulations,
-      generationMode,
-    );
+    setSimulationView("overview");
+    navigateTo("simulation");
   }
 
   function openSavedBundle() {
@@ -435,7 +382,6 @@ export function SandboxApp() {
     setSimulations(savedBundle.simulations);
     setGenerationMode(savedBundle.generationMode);
     setSelectedTrack(savedBundle.decision.selectedTrack);
-    setExpandedTrack(savedBundle.decision.selectedTrack);
     setTasks(savedBundle.plan.tasks);
     setDecisionSaved(true);
     navigateTo("plan");
@@ -495,10 +441,12 @@ export function SandboxApp() {
           {[
             ["profile", "01", "证据化画像"],
             ["simulation", "02", "四轨推演"],
-            ["plan", "03", "30天验证"],
+            ["decision", "03", "辅助决策"],
+            ["plan", "04", "30天短期计划"],
+            ["feishu", "05", "飞书落地"],
           ].map(([key, number, label], index) => {
-            const order = ["profile", "simulation", "plan"];
-            const activeIndex = order.indexOf(stage);
+            // 03 与 05 目前仅用于呈现完整产品链路；对应功能将在后续独立开发。
+            const activeIndex = stage === "profile" ? 0 : stage === "simulation" ? 1 : 3;
             return (
               <div className={`step ${index <= activeIndex ? "active" : ""}`} key={key}>
                 <span>{index < activeIndex ? <Check size={14} /> : number}</span>
@@ -513,10 +461,10 @@ export function SandboxApp() {
         <section className="hero">
           <div className="hero-copy">
             <span className="eyebrow"><Sparkles size={15} /> AI职业决策支持系统</span>
-            <h1>先看清四条路的走向，<br /><em>再决定下一步。</em></h1>
+            <h1>你的AI职业规划师</h1>
             <p>
-              依据你的真实条件、能力证据与现实约束，推演升学深造、体制内发展、
-              市场化就业和自主发展四条路径。不是替你决定，而是帮你做出有依据的决定。
+              基于你的真实条件、能力证据与现实约束，推演主流发展路径，
+              为你匹配一条可落地的主路径，并探索一条兼顾兴趣的成长副线。
             </p>
             <div className="hero-actions">
               <button className="primary-button large" onClick={() => navigateTo("profile")}>
@@ -609,7 +557,7 @@ export function SandboxApp() {
                 <div className="group-toolbar"><div><span className="eyebrow">专属题组</span><h3>按自己的节奏回答或跳过</h3><p>自由发展始终必答；其他题组由前三题的排除结果决定。填写越多，分析越准确。</p></div><button className="secondary-button" type="button" onClick={restartQuestionnaire}><RefreshCw size={16} /> 重新答题</button></div>
                 <div className="group-tabs">{visibleGroups.map((group) => <button type="button" className={activeGroup === group ? "active" : ""} key={group} onClick={() => { setActiveGroup(group); setVisitedGroups((current) => current.includes(group) ? current : [...current, group]); }}>{DIRECTION_META[group].title}{group === "independent" && <em>始终必答</em>}</button>)}</div>
                 {activeGroup && <div className="form-section group-question-list"><div className="form-heading"><span>{String(visibleGroups.indexOf(activeGroup) + 1).padStart(2, "0")}</span><div><h3>{DIRECTION_META[activeGroup].title}</h3><p>每道题均可跳过；答案仅作为路径推荐的自述依据。</p></div></div>{QUESTION_GROUPS[activeGroup].map((question, index) => <div className="question-card" key={question.id}><p><b>{index + 1}.</b> {question.prompt}{question.multiple && <small>（可多选）</small>}</p><div className="choice-grid">{question.options.map((item) => <button type="button" className={(profile.questionnaire.answers[question.id] ?? []).includes(item) ? "active" : ""} key={item} onClick={() => updateAnswer(question.id, item, question.multiple)}>{item}</button>)}</div><button className="skip-link" type="button" onClick={() => updateAnswer(question.id, "", false)}>跳过此题</button></div>)}{activeGroup === "independent" && <div className="question-card open-question"><p><b>{QUESTION_GROUPS.independent.length + 1}.</b> 你目前最大的迷茫与焦虑是什么？</p><small>请用一两句话概括，也可以详细描述。本题可跳过。</small><textarea value={profile.currentConfusion} onChange={(event) => setProfile({ ...profile, currentConfusion: event.target.value })} placeholder="例如：我担心直接就业竞争力不足，也不确定继续读研是否值得。" /><button className="skip-link" type="button" onClick={() => setProfile({ ...profile, currentConfusion: "" })}>跳过此题</button></div>}</div>}
-                {hasVisitedAllGroups ? <div className="form-footer"><span>你可以继续返回题组补充信息；开放题留空不会影响生成。</span><button className="primary-button" onClick={generateSimulations} disabled={loading}>{loading ? <><LoaderCircle className="spin" size={18} /> 正在构建沙盘</> : <>生成四轨推演 <ArrowRight size={18} /></>}</button></div> : <div className="form-footer"><span>请依次浏览其余题组；每个题组中的问题都可以跳过。</span><button className="secondary-button" type="button" onClick={() => { const nextGroup = visibleGroups.find((group) => !visitedGroups.includes(group)); if (nextGroup) { setActiveGroup(nextGroup); setVisitedGroups((current) => [...current, nextGroup]); } }}>继续下一题组 <ArrowRight size={16} /></button></div>}
+                {hasVisitedAllGroups ? <div className="form-footer"><span>你可以继续返回题组补充信息；开放题留空不会影响生成。</span><button className="primary-button" onClick={generateSimulations}>生成四轨推演 <ArrowRight size={18} /></button></div> : <div className="form-footer"><span>请依次浏览其余题组；每个题组中的问题都可以跳过。</span><button className="secondary-button" type="button" onClick={() => { const nextGroup = visibleGroups.find((group) => !visitedGroups.includes(group)); if (nextGroup) { setActiveGroup(nextGroup); setVisitedGroups((current) => [...current, nextGroup]); } }}>继续下一题组 <ArrowRight size={16} /></button></div>}
               </>
             )}
             {message && <div className="error-message"><CircleAlert size={17} />{message}</div>}
@@ -618,58 +566,26 @@ export function SandboxApp() {
       )}
 
       {stage === "simulation" && (
-        <section className="content-container simulation-section">
-          <div className="page-heading">
-            <div><button className="ghost-button" onClick={() => navigateTo("profile")}><ArrowLeft size={16} /> 返回修改画像</button><span className="eyebrow">STEP 02 · 四轨沙盘</span><h2>比较的不是“哪个好”，而是“哪个更适合现在的你”</h2></div>
-            <div className="mode-badge">{generationMode === "minimax+rules" ? "MiniMax + 规则图谱" : "本地规则图谱模式"}</div>
-          </div>
-          <div className="evidence-legend">
-            <span><i className="self" /> 用户自述</span>
-            <span><i className="proof" /> 用户证明</span>
-            <span><i className="rule" /> 外部规则</span>
-            <strong>准备度是相对评分，不是成功率</strong>
-          </div>
-          <div className="track-grid">
-            {simulations.map((simulation) => {
-              const meta = TRACK_META[simulation.track];
-              const Icon = meta.icon;
-              const expanded = expandedTrack === simulation.track;
-              return (
-                <article className={`track-card ${meta.color} ${selectedTrack === simulation.track ? "selected" : ""}`} key={simulation.track}>
-                  <button className="track-summary" onClick={() => setExpandedTrack(expanded ? null : simulation.track)}>
-                    <div className="track-title"><span className="track-icon"><Icon size={20} /></span><div><small>{simulation.subtrack}</small><h3>{simulation.trackName}</h3></div></div>
-                    <div className="readiness"><strong>{simulation.readinessScore}</strong><span>当前准备度</span></div>
-                    <div className="feasibility"><span className={simulation.feasibility}>{simulation.feasibility === "high" ? "高" : simulation.feasibility === "medium" ? "中" : "低"}可行性</span><ChevronDown className={expanded ? "rotate" : ""} size={18} /></div>
-                  </button>
-                  <div className="track-facts">
-                    <p>{simulation.summary}</p>
-                    <div><span>总时间<strong>{simulation.totalTimeCost}</strong></span><span>资金区间<strong>{simulation.totalMoneyCost}</strong></span></div>
-                    <div className="obstacle"><CircleAlert size={15} /><span><small>最大障碍</small>{simulation.majorObstacle}</span></div>
-                  </div>
-                  {expanded && (
-                    <div className="node-timeline">
-                      {simulation.nodes.map((node) => (
-                        <NodeCard node={node} open={expandedNode === node.id} onToggle={() => setExpandedNode(expandedNode === node.id ? null : node.id)} key={node.id} />
-                      ))}
-                    </div>
-                  )}
-                  <button className={`select-track ${selectedTrack === simulation.track ? "chosen" : ""}`} onClick={() => setSelectedTrack(simulation.track)}>
-                    {selectedTrack === simulation.track ? <><Check size={16} /> 已选为主路径</> : "选择这条路径"}
-                  </button>
-                </article>
-              );
-            })}
-          </div>
-          {selectedSimulation && (
-            <div className="decision-bar">
-              <div><Target size={22} /><span><small>你准备进一步验证</small><strong>{selectedSimulation.trackName} · {selectedSimulation.subtrack}</strong></span></div>
-              <p>这不是终身承诺。接下来只生成30天验证任务，用结果决定是否继续。</p>
-              <button className="primary-button" onClick={commitDecision} disabled={decisionSaving}>
-                {decisionSaving ? <><LoaderCircle className="spin" size={18} /> 正在保存决策</> : <>确认决策并生成计划 <ArrowRight size={18} /></>}
-              </button>
+        simulationView === "overview" ? (
+          <section className="content-container four-track-section">
+            <div className="page-heading four-track-heading">
+              <div><button className="ghost-button" onClick={() => navigateTo("profile")}><ArrowLeft size={16} /> 返回证据化画像</button><span className="eyebrow">STEP 02</span><h2>四轨推演：看清每条路的真实结构</h2><p>本页仅展示路径信息，不根据你的个人情况做推荐。</p></div>
             </div>
-          )}
-        </section>
+            <div className="four-track-grid">
+              {TRACK_OVERVIEWS.map((track) => {
+                const isEducation = track.id === "education";
+                const openEducation = (path: EducationPathKey) => { setSimulationScrollY(window.scrollY); setEducationPath(path); setSimulationView("path-simulation"); window.scrollTo({ top: 0, behavior: "smooth" }); };
+                return <article className={`overview-card ${track.id}`} key={track.id}>
+                  <div className="overview-card-header"><span>{track.id === "education" ? "升学深造" : track.id === "public" ? "体制内发展" : track.id === "employment" ? "市场化就业" : "自主发展"}</span><h3>{track.title}</h3><p>{track.definition}</p></div>
+                  {isEducation ? <StrategyComparison /> : <OverviewFacts track={track} />}
+                  {isEducation ? <div className="education-entry-actions"><button className="detail-link" type="button" onClick={() => openEducation("exam")}>查看考研完整推演 <ArrowRight size={16} /></button><button className="detail-link secondary-detail-link" type="button" onClick={() => openEducation("recommendation")}>查看保研完整推演 <ArrowRight size={16} /></button></div> : <span className="detail-pending">完整推演筹备中</span>}
+                </article>;
+              })}
+            </div>
+          </section>
+        ) : (
+          <EducationPathSimulation pathKey={educationPath} onBack={() => { setSimulationView("overview"); window.setTimeout(() => window.scrollTo({ top: simulationScrollY, behavior: "smooth" }), 0); }} />
+        )
       )}
 
       {stage === "plan" && selectedSimulation && (
@@ -719,41 +635,54 @@ export function SandboxApp() {
   );
 }
 
-function NodeCard({ node, open, onToggle }: { node: PathNode; open: boolean; onToggle: () => void }) {
-  return (
-    <div className={`node-card ${open ? "open" : ""}`}>
-      <button className="node-header" onClick={onToggle}>
-        <span className="node-index">{String(node.order).padStart(2, "0")}</span>
-        <div><strong>{node.title}</strong><small>{node.objective}</small></div>
-        <span className={`node-level ${node.feasibility}`}>{node.feasibility === "high" ? "高" : node.feasibility === "medium" ? "中" : "低"}</span>
-        <ChevronDown className={open ? "rotate" : ""} size={16} />
-      </button>
-      {open && (
-        <div className="node-detail">
-          <DetailBlock title="当前证据">
-            <div className="evidence-list">{node.evidence.map((item, index) => <span className={item.kind} key={`${item.kind}-${index}`}><small>{item.label}</small>{item.detail}</span>)}</div>
-          </DetailBlock>
-          <div className="detail-columns">
-            <DetailBlock title="尚存缺口"><ul>{node.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul></DetailBlock>
-            <DetailBlock title="建议行动"><ul>{node.actions.map((action) => <li key={action}>{action}</li>)}</ul></DetailBlock>
-          </div>
-          <DetailBlock title="成本与判断">
-            <div className="cost-row"><span>时间<strong>{node.cost.time}</strong></span><span>资金<strong>{node.cost.money}</strong></span><span>机会成本<strong>{node.cost.opportunity}</strong></span></div>
-            <p className="reasoning">{node.feasibilityReason}</p>
-          </DetailBlock>
-          <DetailBlock title="分支走向">
-            <div className="branch-row">{node.branches.map((branch) => <div className={branch.outcome} key={branch.label}><small>{branch.label}</small><strong>{branch.next}</strong><span>{branch.explanation}</span></div>)}</div>
-          </DetailBlock>
-          <div className="source-row">
-            {node.sources.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}><ExternalLink size={13} />{source.organization}<small>更新：{source.updatedAt}</small></a>)}
-            <span>{node.uncertainty}</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+function StrategyComparison() {
+  return <div className="strategy-comparison" aria-label="保研与考研对比">{EDUCATION_STRATEGIES.map((strategy) => <div className="strategy-cell" key={strategy.name}><h4>{strategy.name}</h4><dl><div><dt>策略类型</dt><dd>{strategy.strategyType}</dd></div><div><dt>启动时间</dt><dd>{strategy.startTime}</dd></div><div><dt>核心依据</dt><dd>{strategy.coreBasis}</dd></div><div><dt>关键投入</dt><dd>{strategy.keyInvestment}</dd></div><div><dt>典型结果</dt><dd>{strategy.typicalOutcome}</dd></div><div><dt>最大不确定性</dt><dd>{strategy.mainRisk}</dd></div></dl></div>)}</div>;
 }
 
-function DetailBlock({ title, children }: { title: string; children: React.ReactNode }) {
-  return <div className="detail-block"><h5>{title}</h5>{children}</div>;
+function OverviewFacts({ track }: { track: (typeof TRACK_OVERVIEWS)[number] }) {
+  return <dl className="overview-facts"><div><dt>路径构成</dt><dd>{track.composition}</dd></div><div><dt>启动时间</dt><dd>{track.start}</dd></div><div><dt>核心门槛</dt><dd>{track.threshold}</dd></div><div><dt>主要投入</dt><dd>{track.investment}</dd></div><div><dt>核心能力</dt><dd><span className="ability-tags">{track.abilities.map((ability) => <i key={ability}>{ability}</i>)}</span></dd></div><div><dt>最大不确定性</dt><dd>{track.uncertainty}</dd></div>{track.id === "independent" && <p className="overview-note">自由发展路径的结果不确定性较高。本系统将其定义为长期探索副线，而非主路径失败后的稳定兜底。</p>}{track.id === "education" && <p className="overview-note">保研与考研是两种不同的升学策略：前者依赖本科阶段的持续积累，后者依赖集中备考与考试结果。</p>}</dl>;
+}
+
+function EducationPathSimulation({ pathKey, onBack }: { pathKey: EducationPathKey; onBack: () => void }) {
+  const path = EDUCATION_PATHS[pathKey];
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const node = path.nodes[currentIndex];
+  const isFirst = currentIndex === 0;
+  const isLast = currentIndex === path.nodes.length - 1;
+
+  function move(direction: -1 | 1) {
+    setCurrentIndex((index) => Math.max(0, Math.min(path.nodes.length - 1, index + direction)));
+  }
+
+  return <section className="path-simulation-page">
+    <div className="path-simulation-container">
+      <button className="ghost-button" onClick={onBack}><ArrowLeft size={16} /> 返回四轨推演</button>
+      <header className="path-simulation-header"><span className="eyebrow">升学路径递进推演</span><h2>{path.title}</h2><p>{path.subtitle}</p><small>{path.note}</small></header>
+      <div className="node-progress" aria-label="推演进度">{path.nodes.map((item, index) => <button type="button" key={item.title} className={index === currentIndex ? "current" : index < currentIndex ? "visited" : ""} onClick={() => setCurrentIndex(index)} aria-label={`节点 ${index + 1}：${item.title}`}><span>{index < currentIndex ? <Check size={13} /> : index + 1}</span><i>{item.title}</i></button>)}</div>
+      <article className="simulation-node-card">
+        <div className="node-card-topline"><span>节点 {String(currentIndex + 1).padStart(2, "0")} / {String(path.nodes.length).padStart(2, "0")}</span><strong>{node.time}</strong></div>
+        <h3>{node.title}</h3><p className="node-summary">{node.summary}</p>
+        <div className="node-information-grid"><NodeInfo title="时间线" content={node.time} /><NodeInfo title="具备条件" items={node.requirements} /><NodeInfo title="所需能力" items={node.capabilities} /><NodeInfo title="风险" items={node.risks} /><NodeInfo title="成本" items={Array.isArray(node.cost) ? node.cost : [node.cost]} /></div>
+        <div className="node-sources"><span>官方资料与核验入口</span>{node.sources.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}>{source.label}<ExternalLink size={14} /></a>)}</div>
+      </article>
+      <div className="node-controls"><button type="button" className="secondary-button" disabled={isFirst} onClick={() => move(-1)}><ArrowLeft size={16} /> 上一步</button>{isLast ? <button type="button" className="primary-button" onClick={onBack}>完成推演 <Check size={16} /></button> : <button type="button" className="primary-button" onClick={() => move(1)}>下一步 <ArrowRight size={16} /></button>}</div>
+    </div>
+  </section>;
+}
+
+function splitIntoParagraphs(value: string) {
+  return value.match(/[^；;。]+[；;。]?/g)?.map((item) => item.trim()).filter(Boolean) ?? [];
+}
+
+function LabeledNodeItem({ value }: { value: string }) {
+  const colonIndex = value.search(/[：:]/);
+  if (colonIndex < 0) return <>{value}</>;
+  return <><span className="node-item-label">{value.slice(0, colonIndex + 1)}</span>{value.slice(colonIndex + 1).trim()}</>;
+}
+
+function NodeInfo({ title, content, items }: { title: string; content?: string; items?: readonly string[] }) {
+  const shouldEmphasizeLabels = title === "具备条件" || title === "风险" || title === "成本";
+  const paragraphs = content ? splitIntoParagraphs(content) : [];
+  const itemParagraphs = items?.flatMap(splitIntoParagraphs) ?? [];
+  return <section className="node-info"><h4>{title}</h4>{paragraphs.length > 0 && <div className="node-text-lines">{paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>}{itemParagraphs.length > 0 && <ul>{itemParagraphs.map((item) => <li key={item}>{shouldEmphasizeLabels ? <LabeledNodeItem value={item} /> : item}</li>)}</ul>}</section>;
 }
