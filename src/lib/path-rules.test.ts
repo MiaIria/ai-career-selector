@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateDeterministicSimulations } from "@/lib/path-rules";
+import { createQuestionnaire } from "@/lib/profile-questionnaire";
 
 const profile = {
   school: "测试大学",
@@ -15,6 +16,7 @@ const profile = {
   monthlyBudget: 800,
   constraints: ["必须兼顾课程"],
   currentConfusion: "想做产品，也在考虑考研",
+  questionnaire: createQuestionnaire(),
 };
 
 describe("四轨规则引擎", () => {

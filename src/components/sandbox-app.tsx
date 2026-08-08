@@ -19,7 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EDUCATION_PATHS, EDUCATION_STRATEGIES, TRACK_OVERVIEWS, type EducationPathKey } from "@/lib/four-track-content";
+import { EDUCATION_PATHS, EDUCATION_STRATEGIES, EMPLOYMENT_PATH, EMPLOYMENT_STRATEGIES, INDEPENDENT_PATHS, INDEPENDENT_STRATEGIES, PUBLIC_PATHS, PUBLIC_STRATEGIES, TRACK_OVERVIEWS, type EducationPathKey, type IndependentPathKey, type PublicPathKey } from "@/lib/four-track-content";
 import {
   createQuestionnaire,
   DIRECTION_META,
@@ -132,7 +132,10 @@ export function SandboxApp() {
   const [visitedGroups, setVisitedGroups] = useState<QuestionnaireGroup[]>([]);
   const [simulationView, setSimulationView] = useState<"overview" | "path-simulation">("overview");
   const [simulationScrollY, setSimulationScrollY] = useState(0);
+  const [pathFamily, setPathFamily] = useState<"education" | "employment" | "public" | "independent">("education");
   const [educationPath, setEducationPath] = useState<EducationPathKey>("exam");
+  const [independentPath, setIndependentPath] = useState<IndependentPathKey>("content");
+  const [publicPath, setPublicPath] = useState<PublicPathKey>("civil_service");
 
   const navigateTo = useCallback((next: Stage) => {
     window.history.pushState({ stage: next }, "", `#${next}`);
@@ -574,17 +577,23 @@ export function SandboxApp() {
             <div className="four-track-grid">
               {TRACK_OVERVIEWS.map((track) => {
                 const isEducation = track.id === "education";
-                const openEducation = (path: EducationPathKey) => { setSimulationScrollY(window.scrollY); setEducationPath(path); setSimulationView("path-simulation"); window.scrollTo({ top: 0, behavior: "smooth" }); };
+                const isPublic = track.id === "public";
+                const isEmployment = track.id === "employment";
+                const isIndependent = track.id === "independent";
+                const openEducation = (path: EducationPathKey) => { setSimulationScrollY(window.scrollY); setPathFamily("education"); setEducationPath(path); setSimulationView("path-simulation"); window.scrollTo({ top: 0, behavior: "smooth" }); };
+                const openEmployment = () => { setSimulationScrollY(window.scrollY); setPathFamily("employment"); setSimulationView("path-simulation"); window.scrollTo({ top: 0, behavior: "smooth" }); };
+                const openPublic = (path: PublicPathKey) => { setSimulationScrollY(window.scrollY); setPathFamily("public"); setPublicPath(path); setSimulationView("path-simulation"); window.scrollTo({ top: 0, behavior: "smooth" }); };
+                const openIndependent = (path: IndependentPathKey) => { setSimulationScrollY(window.scrollY); setPathFamily("independent"); setIndependentPath(path); setSimulationView("path-simulation"); window.scrollTo({ top: 0, behavior: "smooth" }); };
                 return <article className={`overview-card ${track.id}`} key={track.id}>
                   <div className="overview-card-header"><span>{track.id === "education" ? "升学深造" : track.id === "public" ? "体制内发展" : track.id === "employment" ? "市场化就业" : "自主发展"}</span><h3>{track.title}</h3><p>{track.definition}</p></div>
-                  {isEducation ? <StrategyComparison /> : <OverviewFacts track={track} />}
-                  {isEducation ? <div className="education-entry-actions"><button className="detail-link" type="button" onClick={() => openEducation("exam")}>查看考研完整推演 <ArrowRight size={16} /></button><button className="detail-link secondary-detail-link" type="button" onClick={() => openEducation("recommendation")}>查看保研完整推演 <ArrowRight size={16} /></button></div> : <span className="detail-pending">完整推演筹备中</span>}
+                  {isEducation ? <StrategyComparison strategies={EDUCATION_STRATEGIES} /> : isPublic ? <StrategyComparison strategies={PUBLIC_STRATEGIES} /> : isEmployment ? <StrategyComparison strategies={EMPLOYMENT_STRATEGIES} /> : <StrategyComparison strategies={INDEPENDENT_STRATEGIES} />}
+                  {isEducation ? <div className="education-entry-actions"><button className="detail-link" type="button" onClick={() => openEducation("exam")}>查看考研完整推演 <ArrowRight size={16} /></button><button className="detail-link secondary-detail-link" type="button" onClick={() => openEducation("recommendation")}>查看保研完整推演 <ArrowRight size={16} /></button></div> : isPublic ? <div className="education-entry-actions"><button className="detail-link" type="button" onClick={() => openPublic("civil_service")}>查看公务员完整推演 <ArrowRight size={16} /></button><button className="detail-link secondary-detail-link" type="button" onClick={() => openPublic("institution")}>查看事业单位完整推演 <ArrowRight size={16} /></button></div> : isEmployment ? <div className="education-entry-actions"><button className="detail-link" type="button" onClick={openEmployment}>查看校招完整推演 <ArrowRight size={16} /></button></div> : isIndependent ? <div className="education-entry-actions"><button className="detail-link" type="button" onClick={() => openIndependent("content")}>内容创作完整推演 <ArrowRight size={16} /></button><button className="detail-link secondary-detail-link" type="button" onClick={() => openIndependent("opc")}>OPC 一人公司完整推演 <ArrowRight size={16} /></button></div> : <span className="detail-pending">完整推演筹备中</span>}
                 </article>;
               })}
             </div>
           </section>
         ) : (
-          <EducationPathSimulation pathKey={educationPath} onBack={() => { setSimulationView("overview"); window.setTimeout(() => window.scrollTo({ top: simulationScrollY, behavior: "smooth" }), 0); }} />
+          <PathSimulation path={pathFamily === "education" ? EDUCATION_PATHS[educationPath] : pathFamily === "public" ? PUBLIC_PATHS[publicPath] : pathFamily === "employment" ? EMPLOYMENT_PATH : INDEPENDENT_PATHS[independentPath]} onBack={() => { setSimulationView("overview"); window.setTimeout(() => window.scrollTo({ top: simulationScrollY, behavior: "smooth" }), 0); }} />
         )
       )}
 
@@ -635,16 +644,19 @@ export function SandboxApp() {
   );
 }
 
-function StrategyComparison() {
-  return <div className="strategy-comparison" aria-label="保研与考研对比">{EDUCATION_STRATEGIES.map((strategy) => <div className="strategy-cell" key={strategy.name}><h4>{strategy.name}</h4><dl><div><dt>策略类型</dt><dd>{strategy.strategyType}</dd></div><div><dt>启动时间</dt><dd>{strategy.startTime}</dd></div><div><dt>核心依据</dt><dd>{strategy.coreBasis}</dd></div><div><dt>关键投入</dt><dd>{strategy.keyInvestment}</dd></div><div><dt>典型结果</dt><dd>{strategy.typicalOutcome}</dd></div><div><dt>最大不确定性</dt><dd>{strategy.mainRisk}</dd></div></dl></div>)}</div>;
+function StrategyComparison({ strategies }: { strategies: readonly { name: string; strategyType: string; startTime: string; coreBasis: string; keyInvestment: string; typicalOutcome: string; mainRisk: string }[] }) {
+  const rows = [
+    ["策略类型", (strategy: (typeof strategies)[number]) => strategy.strategyType],
+    ["启动时间", (strategy: (typeof strategies)[number]) => strategy.startTime],
+    ["核心依据", (strategy: (typeof strategies)[number]) => strategy.coreBasis],
+    ["关键投入", (strategy: (typeof strategies)[number]) => strategy.keyInvestment],
+    ["典型结果", (strategy: (typeof strategies)[number]) => strategy.typicalOutcome],
+    ["最大不确定性", (strategy: (typeof strategies)[number]) => strategy.mainRisk],
+  ] as const;
+  return <div className="strategy-table-wrap" aria-label="子路径展示表"><table className="strategy-table"><thead><tr><th>展示维度</th>{strategies.map((strategy) => <th key={strategy.name}>{strategy.name}</th>)}</tr></thead><tbody>{rows.map(([label, value]) => <tr key={label}><th scope="row">{label}</th>{strategies.map((strategy) => <td key={strategy.name}>{value(strategy)}</td>)}</tr>)}</tbody></table></div>;
 }
 
-function OverviewFacts({ track }: { track: (typeof TRACK_OVERVIEWS)[number] }) {
-  return <dl className="overview-facts"><div><dt>路径构成</dt><dd>{track.composition}</dd></div><div><dt>启动时间</dt><dd>{track.start}</dd></div><div><dt>核心门槛</dt><dd>{track.threshold}</dd></div><div><dt>主要投入</dt><dd>{track.investment}</dd></div><div><dt>核心能力</dt><dd><span className="ability-tags">{track.abilities.map((ability) => <i key={ability}>{ability}</i>)}</span></dd></div><div><dt>最大不确定性</dt><dd>{track.uncertainty}</dd></div>{track.id === "independent" && <p className="overview-note">自由发展路径的结果不确定性较高。本系统将其定义为长期探索副线，而非主路径失败后的稳定兜底。</p>}{track.id === "education" && <p className="overview-note">保研与考研是两种不同的升学策略：前者依赖本科阶段的持续积累，后者依赖集中备考与考试结果。</p>}</dl>;
-}
-
-function EducationPathSimulation({ pathKey, onBack }: { pathKey: EducationPathKey; onBack: () => void }) {
-  const path = EDUCATION_PATHS[pathKey];
+function PathSimulation({ path, onBack }: { path: { title: string; subtitle: string; note: string; nodes: readonly { title: string; time: string; summary: string; requirements: readonly string[]; capabilities: readonly string[]; cost: string | readonly string[]; risks: readonly string[]; sources: readonly { label: string; url: string }[]; resources?: readonly { label: string; url: string; description: string }[] }[] }; onBack: () => void }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const node = path.nodes[currentIndex];
   const isFirst = currentIndex === 0;
@@ -657,13 +669,14 @@ function EducationPathSimulation({ pathKey, onBack }: { pathKey: EducationPathKe
   return <section className="path-simulation-page">
     <div className="path-simulation-container">
       <button className="ghost-button" onClick={onBack}><ArrowLeft size={16} /> 返回四轨推演</button>
-      <header className="path-simulation-header"><span className="eyebrow">升学路径递进推演</span><h2>{path.title}</h2><p>{path.subtitle}</p><small>{path.note}</small></header>
+      <header className="path-simulation-header"><span className="eyebrow">路径递进推演</span><h2>{path.title}</h2><p>{path.subtitle}</p><small>{path.note}</small></header>
       <div className="node-progress" aria-label="推演进度">{path.nodes.map((item, index) => <button type="button" key={item.title} className={index === currentIndex ? "current" : index < currentIndex ? "visited" : ""} onClick={() => setCurrentIndex(index)} aria-label={`节点 ${index + 1}：${item.title}`}><span>{index < currentIndex ? <Check size={13} /> : index + 1}</span><i>{item.title}</i></button>)}</div>
       <article className="simulation-node-card">
         <div className="node-card-topline"><span>节点 {String(currentIndex + 1).padStart(2, "0")} / {String(path.nodes.length).padStart(2, "0")}</span><strong>{node.time}</strong></div>
         <h3>{node.title}</h3><p className="node-summary">{node.summary}</p>
         <div className="node-information-grid"><NodeInfo title="时间线" content={node.time} /><NodeInfo title="具备条件" items={node.requirements} /><NodeInfo title="所需能力" items={node.capabilities} /><NodeInfo title="风险" items={node.risks} /><NodeInfo title="成本" items={Array.isArray(node.cost) ? node.cost : [node.cost]} /></div>
         <div className="node-sources"><span>官方资料与核验入口</span>{node.sources.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}>{source.label}<ExternalLink size={14} /></a>)}</div>
+        {node.resources && <div className="node-resources"><span>延伸参考资料</span>{node.resources.map((resource) => <a href={resource.url} target="_blank" rel="noreferrer" key={resource.url}><strong>{resource.label}</strong><small>{resource.description}</small><ArrowRight size={15} /></a>)}</div>}
       </article>
       <div className="node-controls"><button type="button" className="secondary-button" disabled={isFirst} onClick={() => move(-1)}><ArrowLeft size={16} /> 上一步</button>{isLast ? <button type="button" className="primary-button" onClick={onBack}>完成推演 <Check size={16} /></button> : <button type="button" className="primary-button" onClick={() => move(1)}>下一步 <ArrowRight size={16} /></button>}</div>
     </div>
