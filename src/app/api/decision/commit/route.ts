@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { buildDecisionEvidence } from "@/lib/decision";
 import { generateDeterministicSimulations } from "@/lib/path-rules";
-import { buildMonthlyPlan } from "@/lib/plan";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserId } from "@/lib/session";
 
@@ -87,6 +86,7 @@ const DecisionSchema = z.object({
   profile: ProfileSchema,
   selectedTrack: TrackSchema,
   selectedSubtrack: z.string().min(1),
+  selectedSideSubtrack: z.string().min(1).optional(),
   simulations: z.array(PathSimulationSchema).length(4),
   generationMode: z.string().min(1),
   userReason: z.string().max(500).optional(),
@@ -130,8 +130,6 @@ export async function POST(request: Request) {
     }
 
     const evidence = buildDecisionEvidence(input.simulations);
-    const planDraft = buildMonthlyPlan(selected);
-
     await prisma.$transaction(async (tx) => {
       const duplicate = await tx.decisionRecord.findUnique({ where: { requestId: input.requestId } });
       if (duplicate) {
@@ -140,9 +138,7 @@ export async function POST(request: Request) {
       }
 
       // 覆盖旧方案前先清理所有依赖；事务中任一步失败都会整体回滚。
-      await tx.weeklyReview.deleteMany({ where: { userId } });
       await tx.feishuResource.deleteMany({ where: { userId } });
-      await tx.monthlyPlan.deleteMany({ where: { userId } });
       await tx.decisionRecord.deleteMany({ where: { userId } });
       await tx.studentProfile.upsert({
         where: { userId },
@@ -170,36 +166,12 @@ export async function POST(request: Request) {
           selectedTrack: input.selectedTrack,
           selectedSubtrack: input.selectedSubtrack,
           aiRanking: evidence.ranking as unknown as Prisma.InputJsonValue,
-          comparison: evidence.comparison as unknown as Prisma.InputJsonValue,
+          comparison: { tracks: evidence.comparison, selectedSideSubtrack: input.selectedSideSubtrack ?? null } as unknown as Prisma.InputJsonValue,
           userReason: input.userReason || null,
           clarityScoreAfter: input.clarityScoreAfter,
         },
       });
 
-      await tx.monthlyPlan.create({
-        data: {
-          userId,
-          track: selected.track,
-          subtrack: selected.subtrack,
-          version: 1,
-          startDate: planDraft.startDate,
-          endDate: planDraft.endDate,
-          rationale: planDraft.rationale,
-          status: "active",
-          tasks: {
-            create: planDraft.tasks.map((task) => ({
-              week: task.week,
-              title: task.title,
-              description: task.description,
-              estimatedMinutes: task.estimatedMinutes,
-              dueDate: task.dueDate,
-              evidenceRequired: task.evidenceRequired,
-              status: "todo",
-              adoptedAt: task.adoptedAt,
-            })),
-          },
-        },
-      });
     });
 
     const bundle = await readCurrentBundle(userId);
@@ -233,16 +205,12 @@ function profileData(profile: z.infer<typeof ProfileSchema>) {
 }
 
 async function readCurrentBundle(userId: string) {
-  const [profile, simulationSnapshot, decision, plan] = await Promise.all([
+  const [profile, simulationSnapshot, decision] = await Promise.all([
     prisma.studentProfile.findUnique({ where: { userId } }),
     prisma.pathSimulationSnapshot.findUnique({ where: { userId } }),
     prisma.decisionRecord.findUnique({ where: { userId } }),
-    prisma.monthlyPlan.findUnique({
-      where: { userId },
-      include: { tasks: { orderBy: [{ week: "asc" }, { dueDate: "asc" }] } },
-    }),
   ]);
-  if (!profile || !decision || !plan) return null;
+  if (!profile || !decision) return null;
 
   const selfStatements = profile.selfStatements as { currentConfusion?: string; questionnaire?: z.infer<typeof ProfileSchema>["questionnaire"] } | null;
   const profileInput: z.infer<typeof ProfileSchema> = {
@@ -291,27 +259,6 @@ async function readCurrentBundle(userId: string) {
       userReason: decision.userReason,
       clarityScoreAfter: decision.clarityScoreAfter,
       committedAt: decision.committedAt,
-    },
-    plan: {
-      track: plan.track,
-      subtrack: plan.subtrack,
-      startDate: plan.startDate,
-      endDate: plan.endDate,
-      rationale: plan.rationale,
-      tasks: plan.tasks.map((task) => ({
-        id: task.id,
-        week: task.week,
-        title: task.title,
-        description: task.description,
-        estimatedMinutes: task.estimatedMinutes,
-        dueInDays: Math.max(
-          0,
-          Math.ceil((task.dueDate.getTime() - plan.startDate.getTime()) / (24 * 60 * 60 * 1000)),
-        ),
-        evidenceRequired: task.evidenceRequired,
-        status: task.status,
-        adopted: Boolean(task.adoptedAt),
-      })),
     },
   };
 }

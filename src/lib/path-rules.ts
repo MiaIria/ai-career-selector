@@ -225,7 +225,7 @@ export function generateDeterministicSimulations(
       terminalGoal: rule.terminalGoal,
       feasibility,
       readinessScore: score,
-      summary: `当前更适合先以${subtrack}做低成本验证，再根据30天证据决定是否持续投入。`,
+      summary: `当前更适合先以${subtrack}做低成本验证，再根据新的证据决定是否持续投入。`,
       majorObstacle: firstGap,
       totalTimeCost: rule.time,
       totalMoneyCost: rule.money,

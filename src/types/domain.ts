@@ -81,14 +81,3 @@ export interface PathSimulation {
   nodes: PathNode[];
 }
 
-export interface MonthlyTask {
-  id: string;
-  week: number;
-  title: string;
-  description: string;
-  estimatedMinutes: number;
-  dueInDays: number;
-  evidenceRequired: string;
-  status: "todo" | "doing" | "done";
-  adopted: boolean;
-}
