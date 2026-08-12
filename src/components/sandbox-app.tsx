@@ -18,6 +18,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { PlanStage, StagePlan } from "@/lib/stage-plan";
+import { stagePlanFileName, toStagePlanDocx, toStagePlanMarkdown } from "@/lib/stage-plan-export";
 import { EDUCATION_PATHS, EDUCATION_STRATEGIES, EMPLOYMENT_PATH, EMPLOYMENT_STRATEGIES, INDEPENDENT_PATHS, INDEPENDENT_STRATEGIES, PUBLIC_PATHS, PUBLIC_STRATEGIES, TRACK_OVERVIEWS, type EducationPathKey, type IndependentPathKey, type PublicPathKey } from "@/lib/four-track-content";
 import { buildDecisionSupport, type DecisionSupportResult, type PrimaryTrackKey, type SideTrackKey } from "@/lib/decision-support";
 import {
@@ -43,6 +45,8 @@ const TRACK_META: Record<
   independent: { icon: Rocket, color: "green", short: "自主创造与商业验证" },
 };
 
+const MAJOR_CATEGORIES = ["理工类", "经管类", "人文社科类", "法学类", "教育类", "艺术传媒类", "农学类", "医学类"] as const;
+
 const initialProfile: StudentProfileInput = {
   school: "",
   major: "",
@@ -65,6 +69,7 @@ function normalizeProfile(profile?: Partial<StudentProfileInput>): StudentProfil
   return {
     ...initialProfile,
     ...profile,
+    major: MAJOR_CATEGORIES.includes(profile?.major as (typeof MAJOR_CATEGORIES)[number]) ? profile?.major ?? "" : "",
     questionnaire: {
       ...createQuestionnaire(),
       ...savedQuestionnaire,
@@ -73,14 +78,14 @@ function normalizeProfile(profile?: Partial<StudentProfileInput>): StudentProfil
   };
 }
 
-type Stage = "welcome" | "profile" | "decision" | "simulation";
+type Stage = "welcome" | "profile" | "decision" | "simulation" | "plan";
 type ProfilePhase = "routing" | "groups";
 
 interface SavedBundle {
   profile: StudentProfileInput;
   simulations: PathSimulation[];
   generationMode: string;
-  decision: { selectedTrack: TrackKey; selectedSubtrack: string };
+  decision: { selectedTrack: TrackKey; selectedSubtrack: string; selectedSideSubtrack?: string | null };
 }
 
 interface DecisionSupportCache {
@@ -127,11 +132,19 @@ export function SandboxApp() {
   const [generationMode, setGenerationMode] = useState("");
   const [session, setSession] = useState<{
     authenticated: boolean;
-    user?: { name?: string };
+    user?: { name?: string; email?: string | null; phone?: string | null };
   }>({ authenticated: false });
   const [isGenerating, setIsGenerating] = useState(false);
   const [decisionCache, setDecisionCache] = useState<DecisionSupportCache | null>(null);
   const [savedBundle, setSavedBundle] = useState<SavedBundle | null>(null);
+  const [decisionSaved, setDecisionSaved] = useState(false);
+  const [savingDecision, setSavingDecision] = useState(false);
+  const [stagePlan, setStagePlan] = useState<StagePlan | null>(null);
+  const [planSaved, setPlanSaved] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState("");
   const [profilePhase, setProfilePhase] = useState<ProfilePhase>("routing");
   const [activeGroup, setActiveGroup] = useState<QuestionnaireGroup | null>(null);
   const [visitedGroups, setVisitedGroups] = useState<QuestionnaireGroup[]>([]);
@@ -152,7 +165,7 @@ export function SandboxApp() {
     window.history.replaceState({ stage: "welcome" }, "", "#welcome");
     const handlePopState = (event: PopStateEvent) => {
       const next = event.state?.stage as Stage | undefined;
-      if (next && ["welcome", "profile", "decision", "simulation"].includes(next)) {
+      if (next && ["welcome", "profile", "decision", "simulation", "plan"].includes(next)) {
         setStage(next);
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
@@ -161,7 +174,7 @@ export function SandboxApp() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  const saveDecisionAndContinue = useCallback(async (
+  const saveDecisionSelection = useCallback(async (
     simulation: PathSimulation,
     requestId: string,
     profileToSave: StudentProfileInput,
@@ -170,6 +183,7 @@ export function SandboxApp() {
     selectedSideSubtrack?: string,
   ) => {
     setMessage("");
+    setSavingDecision(true);
     try {
       const bundle = await persistCompleteBundle(
         profileToSave,
@@ -183,13 +197,14 @@ export function SandboxApp() {
       setSimulations(bundle.simulations);
       setGenerationMode(bundle.generationMode);
       setSavedBundle(bundle);
-      setSimulationView("overview");
-      navigateTo("simulation");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      setDecisionSaved(true);
+      setStagePlan(null);
+      setPlanSaved(false);
+      setMessage("主路径和成长副线已保存成功。");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "完整方案保存失败");
-    } finally { /* 保存状态由提交页面在后续个人化决策模块中呈现。 */ }
-  }, [navigateTo]);
+    } finally { setSavingDecision(false); }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,7 +223,18 @@ export function SandboxApp() {
           const cacheData = await cacheResponse.json();
           if (cancelled) return;
           const bundle = bundleData.bundle as SavedBundle | null;
-          if (bundle) setSavedBundle(bundle);
+          if (bundle) {
+            setSavedBundle(bundle);
+            setDecisionSaved(true);
+            const planResponse = await fetch("/api/stage-plan");
+            if (planResponse.ok) {
+              const planData = await planResponse.json();
+              if (planData.plan && (planData.plan as StagePlan).schemaVersion === 4) {
+                setStagePlan(planData.plan as StagePlan);
+                setPlanSaved(true);
+              }
+            }
+          }
           const cache = cacheData.cache as DecisionSupportCache | null;
           if (cache) {
             const cachedProfile = normalizeProfile(cache.profile);
@@ -222,8 +248,8 @@ export function SandboxApp() {
             setProfilePhase("groups");
             setActiveGroup(cachedGroups[0] ?? null);
             setVisitedGroups(cachedGroups);
-            setSelectedPrimaryTrack(cachedDecision.recommendedPrimary ?? cachedDecision.primary.find((item) => !item.excluded)?.key as PrimaryTrackKey ?? null);
-            setSelectedSideTrack(cachedDecision.recommendedSide ?? cachedDecision.side[0]?.key as SideTrackKey ?? null);
+            setSelectedPrimaryTrack(bundle?.decision.selectedTrack as PrimaryTrackKey ?? cachedDecision.recommendedPrimary ?? cachedDecision.primary.find((item) => !item.excluded)?.key as PrimaryTrackKey ?? null);
+            setSelectedSideTrack(bundle?.decision.selectedSideSubtrack === "OPC 一人公司" ? "opc" : bundle?.decision.selectedSideSubtrack === "内容创作" ? "content" : cachedDecision.recommendedSide ?? cachedDecision.side[0]?.key as SideTrackKey ?? null);
           }
         }
       } catch {
@@ -271,6 +297,8 @@ export function SandboxApp() {
 
   function enterGroups() {
     const { difficultyRanking, excludedDirections, exclusionChoiceMade, futureDirection } = profile.questionnaire;
+    const missingBasics = [!profile.school && "学校层次", !profile.major && "专业大类", !profile.grade && "当前学业时期", !profile.academicStanding && "当前学业水平"].filter(Boolean) as string[];
+    if (missingBasics.length) { setMessage(`请先填写必要信息：${missingBasics.join("、")}。`); setProfilePhase("routing"); return; }
     if (difficultyRanking.length !== 3 || !exclusionChoiceMade || !futureDirection || excludedDirections.length > 2) {
       setMessage("请完成前三道必答题后再进入题组。");
       return;
@@ -324,6 +352,9 @@ export function SandboxApp() {
       setSimulations(generated.simulations);
       setGenerationMode(generated.mode);
       setDecisionSupport(result);
+      setDecisionSaved(false);
+      setStagePlan(null);
+      setPlanSaved(false);
       setSelectedPrimaryTrack(result.recommendedPrimary ?? result.primary.find((item) => !item.excluded)?.key as PrimaryTrackKey ?? null);
       setSelectedSideTrack(result.recommendedSide ?? result.side[0]?.key as SideTrackKey ?? null);
       const cache: DecisionSupportCache = { profile: normalizedProfile, simulations: generated.simulations, generationMode: generated.mode, decisionSupport: result };
@@ -343,6 +374,16 @@ export function SandboxApp() {
     } finally {
       setIsGenerating(false);
     }
+  }
+
+  function selectPrimaryTrack(track: PrimaryTrackKey) {
+    setSelectedPrimaryTrack(track);
+    setDecisionSaved(false);
+  }
+
+  function selectSideTrack(track: SideTrackKey) {
+    setSelectedSideTrack(track);
+    setDecisionSaved(false);
   }
 
   function openPrimaryPath(track: PrimaryTrackKey) {
@@ -379,12 +420,91 @@ export function SandboxApp() {
       setMessage("推演结果不完整，请返回画像后重新生成。");
       return;
     }
-    const requestId = crypto.randomUUID();
     if (!session.authenticated) {
-      setMessage("请在生成系统性阶段方案时登录；当前可继续查看辅助决策和四轨推演。");
+      setAuthMode("login");
+      setAuthError("");
+      setAuthOpen(true);
       return;
     }
-    void saveDecisionAndContinue(chosen, requestId, profile, simulations, generationMode, selectedSideTrack === "opc" ? "OPC 一人公司" : "内容创作");
+    void saveDecisionSelection(chosen, crypto.randomUUID(), profile, simulations, generationMode, selectedSideTrack === "opc" ? "OPC 一人公司" : "内容创作");
+  }
+
+  async function submitAuth(identifier: string, password: string, name: string) {
+    setAuthBusy(true); setAuthError("");
+    try {
+      const response = await fetch(`/api/auth/${authMode === "register" ? "register" : "login"}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier, password, name: name || undefined }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "认证失败");
+      setSession({ authenticated: true, user: data.user });
+      setAuthOpen(false);
+      setMessage("登录成功，正在保存你的主路径和成长副线。");
+      const chosen = simulations.find((item) => item.track === selectedPrimaryTrack);
+      if (chosen && generationMode && selectedPrimaryTrack && selectedSideTrack) void saveDecisionSelection(chosen, crypto.randomUUID(), profile, simulations, generationMode, selectedSideTrack === "opc" ? "OPC 一人公司" : "内容创作");
+    } catch (error) { setAuthError(error instanceof Error ? error.message : "认证失败"); } finally { setAuthBusy(false); }
+  }
+
+  async function logout() {
+    await fetch("/api/auth/session", { method: "DELETE" });
+    setSession({ authenticated: false });
+    setSavedBundle(null);
+    setDecisionSaved(false);
+    setStagePlan(null);
+    setPlanSaved(false);
+    setMessage("已退出登录。");
+  }
+
+  async function generateStagePlan(force = false) {
+    if (!decisionSaved) {
+      setMessage("请先返回辅助决策页保存主路径和成长副线。");
+      return;
+    }
+    if (!force && stagePlan && savedBundle && stableStringify(normalizeProfile(profile)) === stableStringify(normalizeProfile(savedBundle.profile))) {
+      navigateTo("plan");
+      return;
+    }
+    setMessage("");
+    setIsGenerating(true);
+    try {
+      const response = await fetch("/api/stage-plan/generate", { method: "POST" });
+      const data = await response.json();
+      if (response.status === 401) {
+        setAuthMode("login");
+        setAuthError("请先登录后生成阶段方案。");
+        setAuthOpen(true);
+        return;
+      }
+      if (!response.ok) throw new Error(data.error ?? "阶段方案生成失败");
+      setStagePlan(data.plan as StagePlan);
+      setPlanSaved(false);
+      navigateTo("plan");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "阶段方案生成失败");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  async function saveStagePlan() {
+    if (!stagePlan) return;
+    setMessage("");
+    try {
+      const response = await fetch("/api/stage-plan", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan: stagePlan }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "方案保存失败");
+      setPlanSaved(true);
+      setMessage("阶段方案已保存；再次保存会覆盖此前版本。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "方案保存失败");
+    }
+  }
+
+  function downloadBlob(blob: Blob, fileName: string) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   function openSavedBundle() {
@@ -398,7 +518,7 @@ export function SandboxApp() {
 
   return (
     <main className="app-shell">
-      {isGenerating && <div className="generation-overlay" role="status" aria-live="assertive"><div><Sparkles size={22} /><strong>正在生成辅助决策</strong><small>请稍作等待，生成完成前暂不能操作页面。</small></div></div>}
+      {isGenerating && <div className="generation-overlay" role="status" aria-live="assertive"><div><Sparkles size={22} /><strong>正在生成内容</strong><small>请稍作等待，生成完成前暂不能操作页面。</small></div></div>}
       <header className="topbar">
         <button className="brand" onClick={() => navigateTo("welcome")}>
           <span className="brand-mark"><Network size={18} /></span>
@@ -413,9 +533,9 @@ export function SandboxApp() {
             <button className="ghost-button" onClick={openSavedBundle}>查看当前方案</button>
           )}
           {session.authenticated ? (
-            <span className="signed-user"><Check size={14} /> {session.user?.name || "已连接飞书"}</span>
+            <><span className="signed-user"><Check size={14} /> {session.user?.name || session.user?.email || session.user?.phone || "已登录"}</span><button className="ghost-button logout-button" onClick={logout}>退出登录</button></>
           ) : (
-            <a className="ghost-button login-link" href="/api/auth/feishu">使用飞书登录</a>
+            <button className="ghost-button login-link" onClick={() => { setAuthMode("login"); setAuthOpen(true); }}>登录 / 注册</button>
           )}
         </div>
       </header>
@@ -426,9 +546,9 @@ export function SandboxApp() {
             ["profile", "01", "证据化画像"],
             ["decision", "02", "辅助决策"],
             ["simulation", "03", "四轨推演"],
-            ["feishu", "04", "飞书落地"],
+            ["plan", "04", "阶段方案"],
           ].map(([key, number, label], index) => {
-            const activeIndex = stage === "profile" ? 0 : stage === "decision" ? 1 : 2;
+            const activeIndex = stage === "profile" ? 0 : stage === "decision" ? 1 : stage === "simulation" ? 2 : 3;
             return (
               <div className={`step ${index <= activeIndex ? "active" : ""}`} key={key}>
                 <span>{index < activeIndex ? <Check size={14} /> : number}</span>
@@ -450,7 +570,7 @@ export function SandboxApp() {
             </p>
             <div className="hero-actions">
               <button className="primary-button large" onClick={() => navigateTo("profile")}>
-                开始我的路径推演 <ArrowRight size={18} />
+                开始建立我的画像 <ArrowRight size={18} />
               </button>
               {savedBundle && (
                 <button className="ghost-button" onClick={openSavedBundle}>继续查看当前方案</button>
@@ -507,12 +627,12 @@ export function SandboxApp() {
             {profilePhase === "routing" ? (
               <>
                 <div className="form-section">
-                  <div className="form-heading"><span>01</span><div><h3>基本情况（选填）</h3><p>填写越多，后续的路径分析越准确；信息仅用于提供决策建议。</p></div></div>
+                  <div className="form-heading"><span>01</span><div><h3>基本情况（必填）</h3><p>以下四项信息用于确定阶段起点和规划边界，填写完整后才能进入下一步。</p></div></div>
                   <div className="field-grid">
-                    <label><span>学校层次</span><select value={profile.school} onChange={(e) => setProfile({ ...profile, school: e.target.value })}><option value="">暂不填写</option><option>985</option><option>211</option><option>双一流</option><option>普通本科</option></select></label>
-                    <label><span>专业</span><input value={profile.major} onChange={(e) => setProfile({ ...profile, major: e.target.value })} placeholder="例如：工商管理" /></label>
-                    <label><span>当前学业时期</span><select value={profile.grade} onChange={(e) => setProfile({ ...profile, grade: e.target.value })}><option value="">暂不填写</option>{["大一上", "大一下", "大二上", "大二下", "大三上", "大三下", "大四上", "大四下"].map((item) => <option key={item}>{item}</option>)}</select></label>
-                    <label><span>当前学业水平</span><select value={profile.academicStanding} onChange={(e) => setProfile({ ...profile, academicStanding: e.target.value })}><option value="">暂不填写</option>{["前5%", "前10%", "前20%", "普通", "较低"].map((item) => <option key={item}>{item}</option>)}</select></label>
+                    <label><span>学校层次 <em className="required-mark">必填</em></span><select value={profile.school} onChange={(e) => setProfile({ ...profile, school: e.target.value })}><option value="">请选择</option><option>985</option><option>211</option><option>双一流</option><option>普通本科</option></select></label>
+                    <label><span>专业大类 <em className="required-mark">必填</em></span><select value={profile.major} onChange={(e) => setProfile({ ...profile, major: e.target.value })}><option value="">请选择</option>{MAJOR_CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></label>
+                    <label><span>当前学业时期 <em className="required-mark">必填</em></span><select value={profile.grade} onChange={(e) => setProfile({ ...profile, grade: e.target.value })}><option value="">请选择</option>{["大一上", "大一下", "大二上", "大二下", "大三上", "大三下", "大四上", "大四下"].map((item) => <option key={item}>{item}</option>)}</select></label>
+                    <label><span>当前学业水平 <em className="required-mark">必填</em></span><select value={profile.academicStanding} onChange={(e) => setProfile({ ...profile, academicStanding: e.target.value })}><option value="">请选择</option>{["前5%", "前10%", "前20%", "普通", "较低"].map((item) => <option key={item}>{item}</option>)}</select></label>
                   </div>
                 </div>
                 <div className="form-section">
@@ -536,9 +656,9 @@ export function SandboxApp() {
               </>
             ) : (
               <>
-                <div className="group-toolbar"><div><span className="eyebrow">专属题组</span><h3>按自己的节奏回答或跳过</h3><p>自由发展始终必答；其他题组由前三题的排除结果决定。填写越多，分析越准确。</p></div><button className="secondary-button" type="button" onClick={restartQuestionnaire}><RefreshCw size={16} /> 重新答题</button></div>
+                <div className="group-toolbar"><div><span className="eyebrow">专属题组</span><h3>按自己的节奏回答或跳过</h3><p>自由发展始终必答；其他题组由前三题的排除结果决定。填写越多，分析越准确。</p></div><div className="group-toolbar-actions"><button className="secondary-button" type="button" onClick={() => { setProfilePhase("routing"); setMessage(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}>返回基本信息</button><button className="secondary-button" type="button" onClick={restartQuestionnaire}><RefreshCw size={16} /> 重新答题</button></div></div>
                 <div className="group-tabs">{visibleGroups.map((group) => <button type="button" className={activeGroup === group ? "active" : ""} key={group} onClick={() => { setActiveGroup(group); setVisitedGroups((current) => current.includes(group) ? current : [...current, group]); }}>{DIRECTION_META[group].title}{group === "independent" && <em>始终必答</em>}</button>)}</div>
-                {activeGroup && <div className="form-section group-question-list"><div className="form-heading"><span>{String(visibleGroups.indexOf(activeGroup) + 1).padStart(2, "0")}</span><div><h3>{DIRECTION_META[activeGroup].title}</h3><p>每道题均可跳过；答案仅作为路径推荐的自述依据。</p></div></div>{QUESTION_GROUPS[activeGroup].map((question, index) => <div className="question-card" key={question.id}><p><b>{index + 1}.</b> {question.prompt}{question.multiple && <small>（可多选）</small>}</p><div className="choice-grid">{question.options.map((item) => <button type="button" className={(profile.questionnaire.answers[question.id] ?? []).includes(item) ? "active" : ""} key={item} onClick={() => updateAnswer(question.id, item, question.multiple)}>{item}</button>)}</div><button className="skip-link" type="button" onClick={() => updateAnswer(question.id, "", false)}>跳过此题</button></div>)}{activeGroup === "independent" && <div className="question-card open-question"><p><b>{QUESTION_GROUPS.independent.length + 1}.</b> 你目前最大的迷茫与焦虑是什么？</p><small>请用一两句话概括，也可以详细描述。本题可跳过。</small><textarea value={profile.currentConfusion} onChange={(event) => setProfile({ ...profile, currentConfusion: event.target.value })} placeholder="例如：我担心直接就业竞争力不足，也不确定继续读研是否值得。" /><button className="skip-link" type="button" onClick={() => setProfile({ ...profile, currentConfusion: "" })}>跳过此题</button></div>}</div>}
+                {activeGroup && <div className="form-section group-question-list"><div className="form-heading"><span>{String(visibleGroups.indexOf(activeGroup) + 1).padStart(2, "0")}</span><div><h3>{DIRECTION_META[activeGroup].title}</h3><p>每道题均可跳过；答案仅作为路径推荐的自述依据。</p></div></div>{QUESTION_GROUPS[activeGroup].map((question, index) => <div className="question-card" key={question.id}><p><b>{index + 1}.</b> {question.prompt}{question.multiple && <small>（可多选）</small>}</p><div className="choice-grid">{question.options.map((item) => <button type="button" className={(profile.questionnaire.answers[question.id] ?? []).includes(item) ? "active" : ""} key={item} onClick={() => updateAnswer(question.id, item, question.multiple)}>{item}</button>)}</div><button className="skip-link" type="button" onClick={() => updateAnswer(question.id, "", false)}>跳过此题</button></div>)}{activeGroup === "independent" && <div className="question-card open-question"><p><b>{QUESTION_GROUPS.independent.length + 1}.</b> 你目前最大的迷茫与焦虑是什么？</p><small>请用一两句话概括，也可以详细描述。本题可跳过。（填写后可获得开发者寄语哦~）</small><textarea value={profile.currentConfusion} onChange={(event) => setProfile({ ...profile, currentConfusion: event.target.value })} placeholder="例如：我担心直接就业竞争力不足，也不确定继续读研是否值得。" /><button className="skip-link" type="button" onClick={() => setProfile({ ...profile, currentConfusion: "" })}>跳过此题</button></div>}</div>}
                 {hasVisitedAllGroups ? <div className="form-footer"><span>你可以继续返回题组补充信息；开放题留空不会影响生成。</span><button className="primary-button" onClick={generateSimulations}>生成辅助决策 <ArrowRight size={18} /></button></div> : <div className="form-footer"><span>请依次浏览其余题组；每个题组中的问题都可以跳过。</span><button className="secondary-button" type="button" onClick={() => { const nextGroup = visibleGroups.find((group) => !visitedGroups.includes(group)); if (nextGroup) { setActiveGroup(nextGroup); setVisitedGroups((current) => [...current, nextGroup]); } }}>继续下一题组 <ArrowRight size={16} /></button></div>}
               </>
             )}
@@ -553,12 +673,14 @@ export function SandboxApp() {
           selectedPrimary={selectedPrimaryTrack}
           selectedSide={selectedSideTrack}
           onBack={() => navigateTo("profile")}
-          onPrimaryChange={setSelectedPrimaryTrack}
-          onSideChange={setSelectedSideTrack}
+          onPrimaryChange={selectPrimaryTrack}
+          onSideChange={selectSideTrack}
           onOpenPrimary={openPrimaryPath}
           onOpenSide={openSidePath}
           onOpenAll={() => { setSimulationView("overview"); navigateTo("simulation"); }}
           onConfirm={confirmDecision}
+          saved={decisionSaved}
+          saving={savingDecision}
         />
       )}
 
@@ -567,7 +689,9 @@ export function SandboxApp() {
           <section className="content-container four-track-section">
             <div className="page-heading four-track-heading">
               <div><button className="ghost-button" onClick={() => decisionSupport ? navigateTo("decision") : navigateTo("profile")}><ArrowLeft size={16} /> {decisionSupport ? "返回辅助决策" : "返回证据化画像"}</button><span className="eyebrow">STEP 03</span><h2>四轨推演：看清每条路的真实结构</h2><p>本页仅展示路径信息，不根据你的个人情况做推荐。</p></div>
+              <div className="stage-plan-entry"><small>根据你选择的路径</small><button className="primary-button" disabled={!decisionSaved} onClick={() => void generateStagePlan()}>{stagePlan ? "查看阶段方案" : "生成阶段方案"} <ArrowRight size={16} /></button>{!decisionSaved && <span>请先返回辅助决策保存路径</span>}</div>
             </div>
+            {message && <div className="error-message simulation-error"><CircleAlert size={17} />{message}</div>}
             <div className="four-track-grid">
               {TRACK_OVERVIEWS.map((track) => {
                 const isEducation = track.id === "education";
@@ -591,6 +715,20 @@ export function SandboxApp() {
         )
       )}
 
+      {stage === "plan" && stagePlan && <StagePlanPage
+        plan={stagePlan}
+        saved={planSaved}
+        onBack={() => navigateTo("simulation")}
+        onRegenerate={() => {
+          if (window.confirm("重新生成会替换当前未保存的草稿，是否继续？")) void generateStagePlan(true);
+        }}
+        onSave={() => void saveStagePlan()}
+        onDownloadMarkdown={() => downloadBlob(new Blob([toStagePlanMarkdown(stagePlan)], { type: "text/markdown;charset=utf-8" }), stagePlanFileName(stagePlan, "md"))}
+        onDownloadDocx={() => void toStagePlanDocx(stagePlan).then((blob) => downloadBlob(blob, stagePlanFileName(stagePlan, "docx"))).catch(() => setMessage("Word 文件生成失败，请重试。"))}
+      />}
+
+      {authOpen && <AuthDialog mode={authMode} busy={authBusy} error={authError} onModeChange={(mode) => { setAuthMode(mode); setAuthError(""); }} onClose={() => !authBusy && setAuthOpen(false)} onSubmit={submitAuth} />}
+
     </main>
   );
 }
@@ -604,18 +742,50 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function DecisionSupportPage({ decision, selectedPrimary, selectedSide, onBack, onPrimaryChange, onSideChange, onOpenPrimary, onOpenSide, onOpenAll, onConfirm }: { decision: DecisionSupportResult; selectedPrimary: PrimaryTrackKey | null; selectedSide: SideTrackKey | null; onBack: () => void; onPrimaryChange: (track: PrimaryTrackKey) => void; onSideChange: (track: SideTrackKey) => void; onOpenPrimary: (track: PrimaryTrackKey) => void; onOpenSide: (track: SideTrackKey) => void; onOpenAll: () => void; onConfirm: () => void }) {
+const STAGE_MAIN_NAMES: Record<StagePlan["mainPath"], string> = { further_study: "升学深造", public_sector: "体制内发展", employment: "市场化就业", independent: "自主发展" };
+const STAGE_SIDE_NAMES: Record<StagePlan["sidePath"], string> = { content: "内容创作", opc: "OPC 一人公司" };
+
+function StagePlanPage({ plan, saved, onBack, onRegenerate, onSave, onDownloadMarkdown, onDownloadDocx }: { plan: StagePlan; saved: boolean; onBack: () => void; onRegenerate: () => void; onSave: () => void; onDownloadMarkdown: () => void; onDownloadDocx: () => void }) {
+  const [activeStageIndex, setActiveStageIndex] = useState(0);
+  const stageCount = Math.min(plan.mainStages.length, plan.sideStages.length);
+  const activeIndex = Math.min(activeStageIndex, Math.max(stageCount - 1, 0));
+  const activeMainStage = plan.mainStages[activeIndex];
+  const activeSideStage = plan.sideStages[activeIndex];
+  return <section className="content-container stage-plan-page">
+    <div className="page-heading stage-plan-heading"><div><button className="ghost-button" onClick={onBack}><ArrowLeft size={16} /> 返回四轨推演</button><span className="eyebrow">STEP 04 · 系统性阶段方案</span><h2>你的双路径成长方案</h2><p>以主路径为优先，成长副线保持低投入验证；它不是对结果的承诺。</p></div>{saved && <span className="save-badge"><Check size={15} /> 已保存最新版本</span>}</div>
+    <div className="stage-plan-summary"><div><small>当前起点</small><strong>{plan.effectivePeriod}</strong></div><div><small>当前阶段</small><strong>{plan.currentStage}</strong></div><div><small>主路径</small><strong>{STAGE_MAIN_NAMES[plan.mainPath]}</strong></div><div><small>成长副线</small><strong>{STAGE_SIDE_NAMES[plan.sidePath]}</strong></div><div className="stage-plan-end"><small>规划终点</small><strong>{plan.planningEnd}</strong></div></div>
+    <section className="stage-plan-block"><h3>方案摘要</h3><p>{plan.summary}</p></section>
+    <section className="stage-plan-block"><h3>现实约束与规划依据</h3><div className="stage-constraints">{plan.constraints.map((item) => <article key={item.title}><strong>{item.title}</strong><p>{item.analysis}</p></article>)}</div></section>
+    <section className="stage-plan-block"><h3>双路径阶段安排</h3><p className="stage-plan-hint">选择一个阶段，查看该阶段内主路径与成长副线的完整安排。</p><div className="stage-plan-layout"><nav className="stage-period-nav" aria-label="阶段导航">{plan.mainStages.map((stage, index) => <button type="button" key={stage.period} className={index === activeIndex ? "active" : ""} onClick={() => setActiveStageIndex(index)}><span>阶段 {String(index + 1).padStart(2, "0")}</span>{stage.period}</button>)}</nav><div className="stage-plan-columns"><StageColumn title={`主路径｜${STAGE_MAIN_NAMES[plan.mainPath]}`} stage={activeMainStage} tone="main" /><StageColumn title={`成长副线｜${STAGE_SIDE_NAMES[plan.sidePath]}`} stage={activeSideStage} tone="side" /></div></div></section>
+    <section className="stage-plan-block"><h3>主副路径协调建议</h3><ul className="stage-coordination">{plan.coordination.map((item) => <li key={item}>{item}</li>)}</ul></section>
+    {plan.anxiety && <section className="stage-plan-block anxiety-plan"><h3>开发者寄语：对当前焦虑的回应</h3>{plan.anxiety.fixedMessage ? <p className="fixed-anxiety-message">{plan.anxiety.fixedMessage}</p> : <><p><strong>我理解到的担心：</strong>{plan.anxiety.understanding}</p><p><strong>现实判断：</strong>{plan.anxiety.reality}</p><p><strong>可以先做的事：</strong></p><ol className="anxiety-suggestions">{plan.anxiety.suggestions?.map((item) => <li key={item}>{item}</li>)}</ol><p><strong>与方案的连接：</strong>{plan.anxiety.planConnection}</p><p className="anxiety-message">{plan.anxiety.message}</p></>}</section>}
+    <div className="stage-plan-actions"><div><small>当前内容为草稿；只有点击“保存方案”才会覆盖你的历史方案。</small><strong>{saved ? "已保存这份最新方案" : "确认后再保存，便于你先比较与调整"}</strong></div><div><button className="secondary-button" onClick={onRegenerate}><RefreshCw size={16} /> 重新生成</button><button className="primary-button" onClick={onSave}><Check size={16} /> 保存方案</button><button className="ghost-button" onClick={onDownloadMarkdown}>下载 Markdown</button><button className="ghost-button" onClick={onDownloadDocx}>下载 Word</button></div></div>
+  </section>;
+}
+
+function StageColumn({ title, stage, tone }: { title: string; stage: PlanStage | undefined; tone: "main" | "side" }) {
+  if (!stage) return null;
+  return <div className={`stage-column ${tone}`}><h4>{title}</h4><article className="stage-period-card"><div><span>{stage.period}</span><small>{stage.position}</small></div>{stage.goals.map((goal) => <details key={goal.title} open><summary>{goal.title}</summary><p><strong>为什么现在做：</strong>{goal.reason}</p><strong>行动步骤</strong><ol className="stage-steps">{goal.steps.map((step, index) => <li key={step}><span>{["①", "②", "③", "④", "⑤"][index]}</span>{step}</li>)}</ol><strong>完成标准</strong><ul>{goal.completionCriteria.map((item) => <li key={item}>{item}</li>)}</ul><p className="stage-risk"><strong>风险提示：</strong>{goal.riskTip}</p></details>)}</article></div>;
+}
+
+function AuthDialog({ mode, busy, error, onModeChange, onClose, onSubmit }: { mode: "login" | "register"; busy: boolean; error: string; onModeChange: (mode: "login" | "register") => void; onClose: () => void; onSubmit: (identifier: string, password: string, name: string) => void }) {
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  return <div className="auth-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="auth-dialog" role="dialog" aria-modal="true"><button className="auth-close" type="button" onClick={onClose} aria-label="关闭">×</button><span className="eyebrow">AI成长路径沙盘</span><h2>{mode === "login" ? "登录后保存你的方案" : "注册你的成长账户"}</h2><p>支持手机号或邮箱；账户登录后可在不同浏览器继续使用已保存内容。</p>{mode === "register" && <label><span>昵称（选填）</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：小林" /></label>}<label><span>手机号或邮箱</span><input value={identifier} onChange={(event) => setIdentifier(event.target.value)} autoComplete="username" placeholder="手机号 / 邮箱" /></label><label><span>密码</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} placeholder={mode === "login" ? "请输入密码" : "至少 8 位"} /></label>{error && <div className="auth-error"><CircleAlert size={15} />{error}</div>}<button className="primary-button auth-submit" type="button" disabled={busy || !identifier || !password} onClick={() => onSubmit(identifier, password, name)}>{busy ? "处理中…" : mode === "login" ? "登录" : "注册并登录"}</button><button className="auth-switch" type="button" onClick={() => onModeChange(mode === "login" ? "register" : "login")}>{mode === "login" ? "还没有账户？立即注册" : "已有账户？直接登录"}</button></section></div>;
+}
+
+function DecisionSupportPage({ decision, selectedPrimary, selectedSide, onBack, onPrimaryChange, onSideChange, onOpenPrimary, onOpenSide, onOpenAll, onConfirm, saved, saving }: { decision: DecisionSupportResult; selectedPrimary: PrimaryTrackKey | null; selectedSide: SideTrackKey | null; onBack: () => void; onPrimaryChange: (track: PrimaryTrackKey) => void; onSideChange: (track: SideTrackKey) => void; onOpenPrimary: (track: PrimaryTrackKey) => void; onOpenSide: (track: SideTrackKey) => void; onOpenAll: () => void; onConfirm: () => void; saved: boolean; saving: boolean }) {
   const levelLabel = { high: "高适配", medium: "中适配", lower: "较低适配", low: "低适配" } as const;
   return <section className="content-container decision-support-page">
     <div className="page-heading decision-heading">
       <div><button className="ghost-button" onClick={onBack}><ArrowLeft size={16} /> 返回证据化画像</button><span className="eyebrow">STEP 02 · 辅助决策</span><h2>先看当前适配，再决定重点了解哪条路</h2><p>结论仅基于你的当前自述，不是录取、上岸、Offer 或收入结果的承诺。你可以随时改选。</p></div>
-      <button className="ghost-button" onClick={onOpenAll}>查看全部四轨推演 <ArrowRight size={16} /></button>
     </div>
     <div className="decision-notice"><ShieldCheck size={18} /><span>评分依据均为用户自述，需结合学校、岗位与当年官方规则进一步核验。</span></div>
     <div className="decision-view-first"><ArrowRight size={17} /><strong>先查看对应路径推演，再决定是否选择这条路</strong><span>适配等级仅用于帮助你缩小范围，不替代对具体节点、条件、成本与风险的核验。</span></div>
     <section className="decision-section"><div className="decision-section-heading"><span>主路径</span><h3>{decision.primaryTie ? "当前适配度接近，请对比后选择" : "系统先给出一个可调整的优先方向"}</h3><p>被你明确排除的方向不参与排序，但仍可在四轨推演中查看。</p></div><div className="decision-path-grid">{decision.primary.map((item) => <DecisionPathCard key={item.key} item={item} selected={selectedPrimary === item.key} recommended={decision.recommendedPrimary === item.key} label={levelLabel[item.level]} onSelect={() => !item.excluded && onPrimaryChange(item.key as PrimaryTrackKey)} onOpen={() => !item.excluded && onOpenPrimary(item.key as PrimaryTrackKey)} />)}</div></section>
     <section className="decision-section side-decision-section"><div className="decision-section-heading"><span>成长副线</span><h3>{decision.sideTie ? "内容创作与 OPC 当前适配度接近" : "用低投入副线验证你的自主发展倾向"}</h3><p>副线不替代主路径；它用于积累可迁移能力，避免在没有证据时一次性重投入。</p></div><div className="decision-path-grid side-path-grid">{decision.side.map((item) => <DecisionPathCard key={item.key} item={item} selected={selectedSide === item.key} recommended={decision.recommendedSide === item.key} label={levelLabel[item.level]} onSelect={() => onSideChange(item.key as SideTrackKey)} onOpen={() => onOpenSide(item.key as SideTrackKey)} />)}</div></section>
-    <div className="decision-continue"><div><strong>下一步：查看你想重点了解的完整路径，或确认并保存方案</strong><span>你可先查看系统建议，也可直接选择自己更想走的路径；确认后会保存当前选择。</span></div><div className="decision-continue-actions"><button className="secondary-button" disabled={!selectedPrimary} onClick={() => selectedPrimary && onOpenPrimary(selectedPrimary)}>查看所选主路径推演 <ArrowRight size={18} /></button><button className="primary-button" disabled={!selectedPrimary || !selectedSide} onClick={onConfirm}>确认主/副路径并保存 <ArrowRight size={18} /></button></div></div>
+    <div className="decision-continue"><div><strong>下一步：先查看推演，或保存主路径与成长副线</strong><span>查看推演不会写入数据库；保存后可在四轨总览中生成与你的选择相匹配的阶段方案。</span></div><div className="decision-continue-actions"><button className="secondary-button" onClick={onOpenAll}>查看全部四轨推演 <ArrowRight size={18} /></button><button className="primary-button" disabled={!selectedPrimary || !selectedSide || saving} onClick={onConfirm}>{saving ? "正在保存…" : saved ? "已保存当前主/副路径" : "确认主/副路径并保存"} <ArrowRight size={18} /></button></div></div>
   </section>;
 }
 

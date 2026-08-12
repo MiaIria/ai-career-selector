@@ -130,6 +130,21 @@ export async function POST(request: Request) {
     }
 
     const evidence = buildDecisionEvidence(input.simulations);
+    const [previousDecision, previousProfile] = await Promise.all([
+      prisma.decisionRecord.findUnique({ where: { userId } }),
+      prisma.studentProfile.findUnique({ where: { userId }, select: { major: true, grade: true, school: true, academicStanding: true, interests: true, skills: true, experiences: true, values: true, targetCities: true, weeklyHours: true, monthlyBudget: true, constraints: true, selfStatements: true } }),
+    ]);
+    const previousSideSubtrack = (previousDecision?.comparison as { selectedSideSubtrack?: string | null } | undefined)?.selectedSideSubtrack ?? null;
+    const previousProfileFingerprint = previousProfile ? JSON.stringify(previousProfile) : null;
+    const nextData = profileData(input.profile);
+    const nextProfileFingerprint = JSON.stringify({
+      major: nextData.major, grade: nextData.grade, school: nextData.school, academicStanding: nextData.academicStanding,
+      interests: nextData.interests, skills: nextData.skills, experiences: nextData.experiences, values: nextData.values,
+      targetCities: nextData.targetCities, weeklyHours: nextData.weeklyHours, monthlyBudget: nextData.monthlyBudget,
+      constraints: nextData.constraints, selfStatements: nextData.selfStatements,
+    });
+    const profileChanged = previousProfileFingerprint !== nextProfileFingerprint;
+    const selectionChanged = previousDecision?.selectedTrack !== input.selectedTrack || previousSideSubtrack !== (input.selectedSideSubtrack ?? null);
     await prisma.$transaction(async (tx) => {
       const duplicate = await tx.decisionRecord.findUnique({ where: { requestId: input.requestId } });
       if (duplicate) {
@@ -140,6 +155,7 @@ export async function POST(request: Request) {
       // 覆盖旧方案前先清理所有依赖；事务中任一步失败都会整体回滚。
       await tx.feishuResource.deleteMany({ where: { userId } });
       await tx.decisionRecord.deleteMany({ where: { userId } });
+      if (profileChanged || selectionChanged) await tx.stagePlan.deleteMany({ where: { userId } });
       await tx.studentProfile.upsert({
         where: { userId },
         update: profileData(input.profile),
@@ -256,6 +272,7 @@ async function readCurrentBundle(userId: string) {
     decision: {
       selectedTrack: decision.selectedTrack,
       selectedSubtrack: decision.selectedSubtrack,
+      selectedSideSubtrack: (decision.comparison as { selectedSideSubtrack?: string | null }).selectedSideSubtrack ?? null,
       userReason: decision.userReason,
       clarityScoreAfter: decision.clarityScoreAfter,
       committedAt: decision.committedAt,

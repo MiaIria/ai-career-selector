@@ -10,6 +10,9 @@ datasource db {
 model User {
   id                String           @id @default(cuid())
   feishuOpenId      String?          @unique
+  email             String?          @unique
+  phone             String?          @unique
+  passwordHash      String?
   name              String?
   avatarUrl         String?
   accessToken       String?
@@ -21,6 +24,7 @@ model User {
   decisionSupportCache DecisionSupportCache?
   simulationSnapshot PathSimulationSnapshot?
   decision          DecisionRecord?
+  stagePlan         StagePlan?
   feishuConnections FeishuResource[]
 }
 
@@ -83,6 +87,17 @@ model DecisionRecord {
   userReason        String?
   clarityScoreAfter Int?
   committedAt       DateTime @default(now())
+}
+
+model StagePlan {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mainPath  String
+  sidePath  String
+  plan      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model FeishuResource {
