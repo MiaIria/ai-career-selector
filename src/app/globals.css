@@ -393,3 +393,97 @@ textarea { min-height: 82px; resize: vertical; line-height: 1.6; }
   .node-controls { gap: 10px; }
   .node-controls button { flex: 1; }
 }
+
+/* 潮流杂志视觉层：仅覆盖颜色、排版、间距与呈现方式，不改变业务内容与交互逻辑。 */
+:root {
+  --ink: #151515;
+  --muted: #62605b;
+  --line: #1b1b1b;
+  --soft: #e7e2d9;
+  --paper: #f3efe8;
+  --green: #151515;
+  --lime: #d7ff3f;
+  --orange: #ef563d;
+}
+body { background: var(--paper); color: var(--ink); }
+.topbar { height: 78px; padding: 0 4.2vw; background: rgba(243,239,232,.96); border-bottom: 2px solid var(--ink); box-shadow: none; backdrop-filter: none; }
+.brand-mark { border-radius: 0; background: var(--ink); color: var(--lime); }
+.brand strong { font-size: 16px; letter-spacing: -.02em; }
+.brand small { color: var(--muted); }
+.status-pill, .mode-badge { border-radius: 0; background: var(--lime); color: var(--ink); font-weight: 800; }
+.ghost-button, .secondary-button { border: 1.5px solid var(--ink); border-radius: 0; background: transparent; color: var(--ink); font-weight: 700; }
+.ghost-button:hover, .secondary-button:hover { border-color: var(--orange); color: var(--orange); }
+.primary-button { border-radius: 0; background: var(--ink); color: #fff; box-shadow: 5px 5px 0 var(--orange); transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
+.primary-button:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--orange); background: var(--ink); }
+.hero { min-height: calc(100vh - 78px); padding: 8vw 7vw 6vw; background: var(--paper); grid-template-columns: 1.1fr .9fr; }
+.hero::before { width: 360px; height: 360px; border: 2px solid var(--ink); border-radius: 0; right: -130px; top: -100px; transform: rotate(18deg); }
+.hero h1 { font-family: Arial, "Microsoft YaHei", sans-serif; font-weight: 900; letter-spacing: -.07em; }
+.hero h1 em { color: var(--ink); }
+.hero h1 em::after { height: 14px; background: var(--lime); bottom: 2px; }
+.hero-copy > p { color: var(--ink); max-width: 600px; }
+.trust-row { border-top: 2px solid var(--ink); color: var(--ink); }
+.origin-card { border-radius: 0; background: var(--ink); box-shadow: 10px 10px 0 var(--lime); }
+.mini-path { border: 1.5px solid var(--ink); border-radius: 0; box-shadow: none; background: #fffdf8; }
+.mini-path .path-dot, .mini-path.blue .path-dot, .mini-path.orange .path-dot, .mini-path.green .path-dot { border-radius: 0; background: var(--lime); color: var(--ink); }
+.stepper { max-width: 1260px; }
+.step > span { border-radius: 0; border-color: var(--ink); }
+.step.active { color: var(--ink); font-weight: 800; }
+.step.active > span { border-radius: 0; background: var(--ink); border-color: var(--ink); color: var(--lime); }
+.content-container { max-width: 1280px; padding-top: 62px; }
+.profile-layout { grid-template-columns: 300px 1fr; gap: 64px; }
+.section-intro h2, .page-heading h2, .hero h1, .path-simulation-header h2, .employment-guide-header h1, .education-detail-header h2 { font-family: Arial, "Microsoft YaHei", sans-serif; font-weight: 900; letter-spacing: -.055em; }
+.section-intro h2, .page-heading h2 { font-size: clamp(36px, 4vw, 58px); line-height: .98; }
+.section-intro > p, .page-heading p { color: var(--ink); }
+.form-card { border: 1.5px solid var(--ink); border-radius: 0; background: #fffdf8; box-shadow: 10px 10px 0 rgba(21,21,21,.12); }
+.form-section, .question-card, .group-toolbar { border-color: #c7c0b5; }
+.form-heading > span, .question-card p b, .eyebrow { color: var(--orange); }
+.field-grid label > span, .wide-field > span, .choice-label { color: var(--ink); }
+input, textarea, select { border: 1.5px solid var(--ink); border-radius: 0; background: #fffdf8; }
+input:focus, textarea:focus, select:focus { border-color: var(--orange); box-shadow: 4px 4px 0 var(--lime); }
+.choice-grid button { border: 1.5px solid var(--ink); border-radius: 0; background: transparent; color: var(--ink); }
+.choice-grid button.active, .group-tabs button.active { border-color: var(--ink); border-radius: 0; background: var(--ink); color: var(--lime); }
+.required-question { border-left: 5px solid var(--orange); }
+.group-tabs button { border: 1.5px solid var(--ink); border-radius: 0; background: transparent; }
+.four-track-heading, .decision-heading { border-bottom: 2px solid var(--ink); padding-bottom: 28px; }
+.overview-card, .decision-path-card, .simulation-node-card, .stage-plan-block, .guide-section, .detail-section { border: 1.5px solid var(--ink); border-radius: 0; box-shadow: none; background: #fffdf8; }
+.overview-card:nth-child(even), .decision-path-card:nth-child(even) { transform: translateY(12px); }
+.overview-card-header h3, .simulation-node-card h3, .detail-section h3, .guide-section h2 { font-family: Arial, "Microsoft YaHei", sans-serif; font-weight: 900; letter-spacing: -.04em; }
+.strategy-table-wrap, .strategy-cell, .track-card { border-radius: 0; border-color: var(--ink); }
+.strategy-table thead th, .detail-table th { background: var(--ink); color: var(--lime); }
+.decision-support-page { background: var(--paper); }
+.decision-view-first { border: 1.5px solid var(--ink); border-radius: 0; background: var(--lime); color: var(--ink); }
+.decision-section-heading > span, .decision-reasons strong { color: var(--orange); }
+.decision-path-card { min-height: 300px; }
+.decision-path-card.selected { border: 2px solid var(--ink); border-radius: 0; background: var(--ink); box-shadow: 10px 10px 0 var(--orange); }
+.decision-card-top > div > span.recommended-path-label { color: var(--lime); }
+.fit-level { border-radius: 0; border: 1px solid var(--ink); }
+.selection-button, .view-simulation-button { border-radius: 0; border-color: var(--ink); }
+.view-simulation-button { background: var(--ink); }
+.decision-continue { border: 1.5px solid var(--ink); border-radius: 0; background: var(--lime); }
+.path-simulation-page, .employment-guide-page, .education-detail-page { background: var(--paper); }
+.path-simulation-header, .employment-guide-header, .education-detail-header { border-bottom: 2px solid var(--ink); padding-bottom: 24px; }
+.node-progress button span { border-radius: 0; border-color: var(--ink); }
+.node-progress button.current span { border-radius: 0; background: var(--ink); border-color: var(--ink); color: var(--lime); box-shadow: 5px 5px 0 var(--orange); }
+.node-progress button.current, .node-progress button.visited { color: var(--ink); }
+.node-info { border-radius: 0; border-color: var(--ink); }
+.node-info h4 { color: var(--ink); }
+.node-sources a, .node-resources { border-radius: 0; border-color: var(--ink); }
+.stage-plan-layout, .stage-plan-summary, .stage-plan-actions { border-radius: 0; }
+.stage-period-nav button { border-radius: 0; border: 1.5px solid var(--ink); }
+.stage-period-nav button.active { background: var(--ink); color: var(--lime); }
+.stage-plan-actions { border: 1.5px solid var(--ink); background: var(--ink); border-radius: 0; box-shadow: 8px 8px 0 var(--orange); }
+.anxiety-plan { border-color: var(--ink); background: #fffdf8; }
+@media (max-width: 900px) {
+  .hero { grid-template-columns: 1fr; }
+  .profile-layout { grid-template-columns: 1fr; gap: 28px; }
+  .overview-card:nth-child(even), .decision-path-card:nth-child(even) { transform: none; }
+  .decision-path-grid, .side-path-grid, .four-track-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .hero { padding: 55px 20px; }
+  .hero h1 { font-size: 42px; }
+  .content-container { padding: 38px 14px 70px; }
+  .form-card { padding: 5px 17px 22px; }
+  .section-intro h2, .page-heading h2 { font-size: 38px; }
+  .stage-plan-actions { align-items: stretch; flex-direction: column; }
+}
