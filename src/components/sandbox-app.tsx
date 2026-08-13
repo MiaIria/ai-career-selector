@@ -14,7 +14,6 @@ import {
   Network,
   RefreshCw,
   Rocket,
-  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -528,7 +527,6 @@ export function SandboxApp() {
           </span>
         </button>
         <div className="topbar-actions">
-          <span className="status-pill"><ShieldCheck size={14} /> 情景模拟，不承诺结果</span>
           {savedBundle && (
             <button className="ghost-button" onClick={openSavedBundle}>查看当前方案</button>
           )}
@@ -617,17 +615,13 @@ export function SandboxApp() {
             <button className="ghost-button" onClick={() => navigateTo("welcome")}><ArrowLeft size={16} /> 返回首页</button>
             <span className="eyebrow">STEP 01</span>
             <h2>建立证据化画像</h2>
-            <p>画像不是给你贴标签，而是明确推演从哪里出发。系统会把“你怎么评价自己”和“你能提供什么证明”分开处理。</p>
-            <div className="notice-card">
-              <CircleAlert size={18} />
-              <p>当前MVP不上传成绩单或简历。证书、作品和项目结果将在下一版支持。</p>
-            </div>
+              <p>请先填写基本信息，再按自己的节奏完成专属题组。</p>
           </aside>
           <div className="form-card questionnaire-card">
             {profilePhase === "routing" ? (
               <>
                 <div className="form-section">
-                  <div className="form-heading"><span>01</span><div><h3>基本情况（必填）</h3><p>以下四项信息用于确定阶段起点和规划边界，填写完整后才能进入下一步。</p></div></div>
+                  <div className="form-heading"><span>01</span><div><h3>基本情况（必填）</h3></div></div>
                   <div className="field-grid">
                     <label><span>学校层次 <em className="required-mark">必填</em></span><select value={profile.school} onChange={(e) => setProfile({ ...profile, school: e.target.value })}><option value="">请选择</option><option>985</option><option>211</option><option>双一流</option><option>普通本科</option></select></label>
                     <label><span>专业大类 <em className="required-mark">必填</em></span><select value={profile.major} onChange={(e) => setProfile({ ...profile, major: e.target.value })}><option value="">请选择</option>{MAJOR_CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -649,17 +643,16 @@ export function SandboxApp() {
                   <div className="question-card required-question">
                     <p><b>3.</b> 排除你目前几乎不可能选择的方向（可多选，最多两项）</p>
                     <div className="choice-grid">{["考/保研", "考公", "就业"].map((item) => <button type="button" className={profile.questionnaire.excludedDirections.includes(item) ? "active" : ""} key={item} onClick={() => { const current = profile.questionnaire.excludedDirections; updateQuestionnaire({ exclusionChoiceMade: true, excludedDirections: current.includes(item) ? current.filter((value) => value !== item) : current.length < 2 ? [...current, item] : current }); }}>{item}</button>)}<button type="button" className={profile.questionnaire.exclusionChoiceMade && profile.questionnaire.excludedDirections.length === 0 ? "active" : ""} onClick={() => updateQuestionnaire({ exclusionChoiceMade: true, excludedDirections: [] })}>都不排除</button></div>
-                    <small>被排除的方向不会展示相关题组，也不会参与主路径推荐；自由发展题组始终保留。</small>
                   </div>
                 </div>
                 <div className="form-footer"><span>完成后将锁定前三题，并按你的排除项生成专属题组。</span><button className="primary-button" type="button" onClick={enterGroups}>进入专属题组 <ArrowRight size={18} /></button></div>
               </>
             ) : (
               <>
-                <div className="group-toolbar"><div><span className="eyebrow">专属题组</span><h3>按自己的节奏回答或跳过</h3><p>自由发展始终必答；其他题组由前三题的排除结果决定。填写越多，分析越准确。</p></div><div className="group-toolbar-actions"><button className="secondary-button" type="button" onClick={() => { setProfilePhase("routing"); setMessage(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}>返回基本信息</button><button className="secondary-button" type="button" onClick={restartQuestionnaire}><RefreshCw size={16} /> 重新答题</button></div></div>
+                <div className="group-toolbar"><div><span className="eyebrow">专属题组</span><h3>按自己的节奏回答或跳过</h3></div><div className="group-toolbar-actions"><button className="secondary-button" type="button" onClick={() => { setProfilePhase("routing"); setMessage(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}>返回基本信息</button><button className="secondary-button" type="button" onClick={restartQuestionnaire}><RefreshCw size={16} /> 重新答题</button></div></div>
                 <div className="group-tabs">{visibleGroups.map((group) => <button type="button" className={activeGroup === group ? "active" : ""} key={group} onClick={() => { setActiveGroup(group); setVisitedGroups((current) => current.includes(group) ? current : [...current, group]); }}>{DIRECTION_META[group].title}{group === "independent" && <em>始终必答</em>}</button>)}</div>
-                {activeGroup && <div className="form-section group-question-list"><div className="form-heading"><span>{String(visibleGroups.indexOf(activeGroup) + 1).padStart(2, "0")}</span><div><h3>{DIRECTION_META[activeGroup].title}</h3><p>每道题均可跳过；答案仅作为路径推荐的自述依据。</p></div></div>{QUESTION_GROUPS[activeGroup].map((question, index) => <div className="question-card" key={question.id}><p><b>{index + 1}.</b> {question.prompt}{question.multiple && <small>（可多选）</small>}</p><div className="choice-grid">{question.options.map((item) => <button type="button" className={(profile.questionnaire.answers[question.id] ?? []).includes(item) ? "active" : ""} key={item} onClick={() => updateAnswer(question.id, item, question.multiple)}>{item}</button>)}</div><button className="skip-link" type="button" onClick={() => updateAnswer(question.id, "", false)}>跳过此题</button></div>)}{activeGroup === "independent" && <div className="question-card open-question"><p><b>{QUESTION_GROUPS.independent.length + 1}.</b> 你目前最大的迷茫与焦虑是什么？</p><small>请用一两句话概括，也可以详细描述。本题可跳过。（填写后可获得开发者寄语哦~）</small><textarea value={profile.currentConfusion} onChange={(event) => setProfile({ ...profile, currentConfusion: event.target.value })} placeholder="例如：我担心直接就业竞争力不足，也不确定继续读研是否值得。" /><button className="skip-link" type="button" onClick={() => setProfile({ ...profile, currentConfusion: "" })}>跳过此题</button></div>}</div>}
-                {hasVisitedAllGroups ? <div className="form-footer"><span>你可以继续返回题组补充信息；开放题留空不会影响生成。</span><button className="primary-button" onClick={generateSimulations}>生成辅助决策 <ArrowRight size={18} /></button></div> : <div className="form-footer"><span>请依次浏览其余题组；每个题组中的问题都可以跳过。</span><button className="secondary-button" type="button" onClick={() => { const nextGroup = visibleGroups.find((group) => !visitedGroups.includes(group)); if (nextGroup) { setActiveGroup(nextGroup); setVisitedGroups((current) => [...current, nextGroup]); } }}>继续下一题组 <ArrowRight size={16} /></button></div>}
+                {activeGroup && <div className="form-section group-question-list"><div className="form-heading"><span>{String(visibleGroups.indexOf(activeGroup) + 1).padStart(2, "0")}</span><div><h3>{DIRECTION_META[activeGroup].title}</h3></div></div>{QUESTION_GROUPS[activeGroup].map((question, index) => <div className="question-card" key={question.id}><p><b>{index + 1}.</b> {question.prompt}{question.multiple && <small>（可多选）</small>}</p><div className="choice-grid">{question.options.map((item) => <button type="button" className={(profile.questionnaire.answers[question.id] ?? []).includes(item) ? "active" : ""} key={item} onClick={() => updateAnswer(question.id, item, question.multiple)}>{item}</button>)}</div><button className="skip-link" type="button" onClick={() => updateAnswer(question.id, "", false)}>跳过此题</button></div>)}{activeGroup === "independent" && <div className="question-card open-question"><p><b>{QUESTION_GROUPS.independent.length + 1}.</b> 你目前最大的迷茫与焦虑是什么？</p><small>请用一两句话概括，也可以详细描述。本题可跳过。</small><textarea value={profile.currentConfusion} onChange={(event) => setProfile({ ...profile, currentConfusion: event.target.value })} placeholder="例如：我担心直接就业竞争力不足，也不确定继续读研是否值得。" /><button className="skip-link" type="button" onClick={() => setProfile({ ...profile, currentConfusion: "" })}>跳过此题</button></div>}</div>}
+                {hasVisitedAllGroups ? <div className="form-footer"><button className="primary-button" onClick={generateSimulations}>生成辅助决策 <ArrowRight size={18} /></button></div> : <div className="form-footer"><button className="secondary-button" type="button" onClick={() => { const nextGroup = visibleGroups.find((group) => !visitedGroups.includes(group)); if (nextGroup) { setActiveGroup(nextGroup); setVisitedGroups((current) => [...current, nextGroup]); } }}>继续下一题组 <ArrowRight size={16} /></button></div>}
               </>
             )}
             {message && <div className="error-message"><CircleAlert size={17} />{message}</div>}
@@ -688,8 +681,8 @@ export function SandboxApp() {
         simulationView === "overview" ? (
           <section className="content-container four-track-section">
             <div className="page-heading four-track-heading">
-              <div><button className="ghost-button" onClick={() => decisionSupport ? navigateTo("decision") : navigateTo("profile")}><ArrowLeft size={16} /> {decisionSupport ? "返回辅助决策" : "返回证据化画像"}</button><span className="eyebrow">STEP 03</span><h2>四轨推演：看清每条路的真实结构</h2><p>本页仅展示路径信息，不根据你的个人情况做推荐。</p></div>
-              <div className="stage-plan-entry"><small>根据你选择的路径</small><button className="primary-button" disabled={!decisionSaved} onClick={() => void generateStagePlan()}>{stagePlan ? "查看阶段方案" : "生成阶段方案"} <ArrowRight size={16} /></button>{!decisionSaved && <span>请先返回辅助决策保存路径</span>}</div>
+              <div><button className="ghost-button" onClick={() => decisionSupport ? navigateTo("decision") : navigateTo("profile")}><ArrowLeft size={16} /> {decisionSupport ? "返回辅助决策" : "返回证据化画像"}</button><span className="eyebrow">STEP 03</span><h2>四轨推演：看清每条路的真实结构</h2></div>
+              <div className="stage-plan-entry"><button className="primary-button" disabled={!decisionSaved} onClick={() => void generateStagePlan()}>{stagePlan ? "查看阶段方案" : "生成阶段方案"} <ArrowRight size={16} /></button></div>
             </div>
             {message && <div className="error-message simulation-error"><CircleAlert size={17} />{message}</div>}
             <div className="four-track-grid">
@@ -759,7 +752,7 @@ function StagePlanPage({ plan, saved, onBack, onRegenerate, onSave, onDownloadMa
     <section className="stage-plan-block"><h3>双路径阶段安排</h3><p className="stage-plan-hint">选择一个阶段，查看该阶段内主路径与成长副线的完整安排。</p><div className="stage-plan-layout"><nav className="stage-period-nav" aria-label="阶段导航">{plan.mainStages.map((stage, index) => <button type="button" key={stage.period} className={index === activeIndex ? "active" : ""} onClick={() => setActiveStageIndex(index)}><span>阶段 {String(index + 1).padStart(2, "0")}</span>{stage.period}</button>)}</nav><div className="stage-plan-columns"><StageColumn title={`主路径｜${STAGE_MAIN_NAMES[plan.mainPath]}`} stage={activeMainStage} tone="main" /><StageColumn title={`成长副线｜${STAGE_SIDE_NAMES[plan.sidePath]}`} stage={activeSideStage} tone="side" /></div></div></section>
     <section className="stage-plan-block"><h3>主副路径协调建议</h3><ul className="stage-coordination">{plan.coordination.map((item) => <li key={item}>{item}</li>)}</ul></section>
     {plan.anxiety && <section className="stage-plan-block anxiety-plan"><h3>开发者寄语：对当前焦虑的回应</h3>{plan.anxiety.fixedMessage ? <p className="fixed-anxiety-message">{plan.anxiety.fixedMessage}</p> : <><p><strong>我理解到的担心：</strong>{plan.anxiety.understanding}</p><p><strong>现实判断：</strong>{plan.anxiety.reality}</p><p><strong>可以先做的事：</strong></p><ol className="anxiety-suggestions">{plan.anxiety.suggestions?.map((item) => <li key={item}>{item}</li>)}</ol><p><strong>与方案的连接：</strong>{plan.anxiety.planConnection}</p><p className="anxiety-message">{plan.anxiety.message}</p></>}</section>}
-    <div className="stage-plan-actions"><div><small>当前内容为草稿；只有点击“保存方案”才会覆盖你的历史方案。</small><strong>{saved ? "已保存这份最新方案" : "确认后再保存，便于你先比较与调整"}</strong></div><div><button className="secondary-button" onClick={onRegenerate}><RefreshCw size={16} /> 重新生成</button><button className="primary-button" onClick={onSave}><Check size={16} /> 保存方案</button><button className="ghost-button" onClick={onDownloadMarkdown}>下载 Markdown</button><button className="ghost-button" onClick={onDownloadDocx}>下载 Word</button></div></div>
+    <div className="stage-plan-actions"><div><strong>{saved ? "已保存这份最新方案" : "阶段方案"}</strong></div><div><button className="secondary-button" onClick={onRegenerate}><RefreshCw size={16} /> 重新生成</button><button className="primary-button" onClick={onSave}><Check size={16} /> 保存方案</button><button className="ghost-button" onClick={onDownloadMarkdown}>下载 Markdown</button><button className="ghost-button" onClick={onDownloadDocx}>下载 Word</button></div></div>
   </section>;
 }
 
@@ -779,20 +772,20 @@ function DecisionSupportPage({ decision, selectedPrimary, selectedSide, onBack, 
   const levelLabel = { high: "高适配", medium: "中适配", lower: "较低适配", low: "低适配" } as const;
   return <section className="content-container decision-support-page">
     <div className="page-heading decision-heading">
-      <div><button className="ghost-button" onClick={onBack}><ArrowLeft size={16} /> 返回证据化画像</button><span className="eyebrow">STEP 02 · 辅助决策</span><h2>先看当前适配，再决定重点了解哪条路</h2><p>结论仅基于你的当前自述，不是录取、上岸、Offer 或收入结果的承诺。你可以随时改选。</p></div>
+      <div><button className="ghost-button" onClick={onBack}><ArrowLeft size={16} /> 返回证据化画像</button><span className="eyebrow">STEP 02 · 辅助决策</span><h2>先看当前适配，再决定重点了解哪条路</h2></div>
     </div>
-    <div className="decision-notice"><ShieldCheck size={18} /><span>评分依据均为用户自述，需结合学校、岗位与当年官方规则进一步核验。</span></div>
-    <div className="decision-view-first"><ArrowRight size={17} /><strong>先查看对应路径推演，再决定是否选择这条路</strong><span>适配等级仅用于帮助你缩小范围，不替代对具体节点、条件、成本与风险的核验。</span></div>
-    <section className="decision-section"><div className="decision-section-heading"><span>主路径</span><h3>{decision.primaryTie ? "当前适配度接近，请对比后选择" : "系统先给出一个可调整的优先方向"}</h3><p>被你明确排除的方向不参与排序，但仍可在四轨推演中查看。</p></div><div className="decision-path-grid">{decision.primary.map((item) => <DecisionPathCard key={item.key} item={item} selected={selectedPrimary === item.key} recommended={decision.recommendedPrimary === item.key} label={levelLabel[item.level]} onSelect={() => !item.excluded && onPrimaryChange(item.key as PrimaryTrackKey)} onOpen={() => !item.excluded && onOpenPrimary(item.key as PrimaryTrackKey)} />)}</div></section>
+    <div className="decision-view-first"><ArrowRight size={17} /><strong>先查看对应路径推演，再决定是否选择这条路</strong></div>
+    <section className="decision-section"><div className="decision-section-heading"><span>主路径</span><h3>{decision.primaryTie ? "当前适配度接近，请对比后选择" : "系统先给出一个可调整的优先方向"}</h3><p>被你明确排除的方向不参与排序，但仍可在四轨推演中查看。</p></div><div className="decision-path-grid">{decision.primary.map((item) => <DecisionPathCard key={item.key} item={item} selected={selectedPrimary === item.key} recommended={decision.recommendedPrimary === item.key} label={levelLabel[item.level]} hideFitLevel={decision.forcedFurtherStudy && item.key === "further_study"} onSelect={() => !item.excluded && onPrimaryChange(item.key as PrimaryTrackKey)} onOpen={() => !item.excluded && onOpenPrimary(item.key as PrimaryTrackKey)} />)}</div></section>
     <section className="decision-section side-decision-section"><div className="decision-section-heading"><span>成长副线</span><h3>{decision.sideTie ? "内容创作与 OPC 当前适配度接近" : "用低投入副线验证你的自主发展倾向"}</h3><p>副线不替代主路径；它用于积累可迁移能力，避免在没有证据时一次性重投入。</p></div><div className="decision-path-grid side-path-grid">{decision.side.map((item) => <DecisionPathCard key={item.key} item={item} selected={selectedSide === item.key} recommended={decision.recommendedSide === item.key} label={levelLabel[item.level]} onSelect={() => onSideChange(item.key as SideTrackKey)} onOpen={() => onOpenSide(item.key as SideTrackKey)} />)}</div></section>
-    <div className="decision-continue"><div><strong>下一步：先查看推演，或保存主路径与成长副线</strong><span>查看推演不会写入数据库；保存后可在四轨总览中生成与你的选择相匹配的阶段方案。</span></div><div className="decision-continue-actions"><button className="secondary-button" onClick={onOpenAll}>查看全部四轨推演 <ArrowRight size={18} /></button><button className="primary-button" disabled={!selectedPrimary || !selectedSide || saving} onClick={onConfirm}>{saving ? "正在保存…" : saved ? "已保存当前主/副路径" : "确认主/副路径并保存"} <ArrowRight size={18} /></button></div></div>
+    <div className="decision-continue"><div><strong>下一步：先查看推演，或保存主路径与成长副线</strong></div><div className="decision-continue-actions"><button className="secondary-button" onClick={onOpenAll}>查看全部四轨推演 <ArrowRight size={18} /></button><button className="primary-button" disabled={!selectedPrimary || !selectedSide || saving} onClick={onConfirm}>{saving ? "正在保存…" : saved ? "已保存当前主/副路径" : "确认主/副路径并保存"} <ArrowRight size={18} /></button></div></div>
   </section>;
 }
 
-function DecisionPathCard({ item, selected, recommended, label, onSelect, onOpen }: { item: DecisionSupportResult["primary"][number] | DecisionSupportResult["side"][number]; selected: boolean; recommended: boolean; label: string; onSelect: () => void; onOpen: () => void }) {
-  const topReasons = item.reasons.slice(0, 2);
+function DecisionPathCard({ item, selected, recommended, label, hideFitLevel = false, onSelect, onOpen }: { item: DecisionSupportResult["primary"][number] | DecisionSupportResult["side"][number]; selected: boolean; recommended: boolean; label: string; hideFitLevel?: boolean; onSelect: () => void; onOpen: () => void }) {
+  const gateReasons = item.reasons.filter((reason) => reason.ruleId === "graduate-gate-one" || reason.ruleId === "graduate-gate-two");
+  const topReasons = [...gateReasons, ...item.reasons.filter((reason) => !gateReasons.includes(reason))].slice(0, 2);
   const topRisks = item.risks.slice(0, 1);
-  return <article className={`decision-path-card ${selected ? "selected" : ""} ${item.excluded ? "excluded" : ""}`}><div className="decision-card-top"><div><span>{item.excluded ? "已按你的意愿排除" : recommended ? "系统建议优先了解" : "可选路径"}</span><h4>{item.name}</h4><small>{item.subtrack}</small></div><b className={`fit-level ${item.level}`}>{item.excluded ? "不参与排名" : label}</b></div>{!item.excluded && <><div className="decision-reasons"><strong>主要加分依据</strong>{topReasons.length ? topReasons.map((reason) => <p key={reason.ruleId}>+ {reason.text}</p>) : <p>尚未获得明确加分证据</p>}</div>{topRisks.length > 0 && <div className="decision-risks"><strong>主要风险</strong>{topRisks.map((reason) => <p key={reason.ruleId}>{reason.text}</p>)}</div>}{item.missing.length > 0 && <small className="decision-missing">未提供：{item.missing.slice(0, 2).join("、")}</small>}<div className="decision-card-actions"><button type="button" className="selection-button" onClick={onSelect}>{selected ? <><Check size={15} /> 已选中</> : "选择此路径"}</button><button type="button" className="view-simulation-button" onClick={onOpen}>查看推演 <ArrowRight size={15} /></button></div></>}</article>;
+  return <article className={`decision-path-card ${selected ? "selected" : ""} ${item.excluded ? "excluded" : ""}`}><div className="decision-card-top"><div><span className={recommended ? "recommended-path-label" : undefined}>{item.excluded ? "已按你的意愿排除" : recommended ? "系统建议优先了解" : "可选路径"}</span><h4>{item.name}</h4><small>{item.subtrack}</small></div>{!hideFitLevel && <b className={`fit-level ${item.level}`}>{item.excluded ? "不参与排名" : label}</b>}</div>{!item.excluded && <><div className="decision-reasons"><strong>主要加分依据</strong>{topReasons.length ? topReasons.map((reason) => <p key={reason.ruleId}>+ {reason.text}</p>) : <p>尚未获得明确加分证据</p>}</div>{topRisks.length > 0 && <div className="decision-risks"><strong>主要风险</strong>{topRisks.map((reason) => <p key={reason.ruleId}>{reason.text}</p>)}</div>}{item.missing.length > 0 && <small className="decision-missing">未提供：{item.missing.slice(0, 2).join("、")}</small>}<div className="decision-card-actions"><button type="button" className="selection-button" onClick={onSelect}>{selected ? <><Check size={15} /> 已选中</> : "选择此路径"}</button><button type="button" className="view-simulation-button" onClick={onOpen}>查看推演 <ArrowRight size={15} /></button></div></>}</article>;
 }
 
 function StrategyComparison({ strategies }: { strategies: readonly { name: string; strategyType: string; startTime: string; coreBasis: string; keyInvestment: string; typicalOutcome: string; mainRisk: string }[] }) {
