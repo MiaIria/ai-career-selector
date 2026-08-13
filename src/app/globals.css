@@ -394,6 +394,56 @@ textarea { min-height: 82px; resize: vertical; line-height: 1.6; }
   .node-controls button { flex: 1; }
 }
 
+/* 阶段方案：单一成长档案画布 */
+.stage-plan-dossier { margin-top: 28px; border: 2px solid var(--ink); background: #fffdf8; box-shadow: 12px 12px 0 rgba(21,21,21,.12); }
+.stage-plan-dossier > .stage-plan-summary { border: 0; border-bottom: 2px solid var(--ink); border-radius: 0; }
+.stage-plan-dossier > .stage-plan-block { margin-top: 0; border: 0; border-bottom: 1px solid #c7c0b5; border-radius: 0; background: transparent; }
+.stage-plan-dossier > .stage-plan-block:last-child { border-bottom: 0; }
+.stage-plan-lead { padding: 30px 34px 32px; position: relative; }
+.stage-plan-lead::before { content: ""; position: absolute; left: 0; top: 28px; bottom: 28px; width: 8px; background: var(--lime); }
+.stage-plan-lead h3 { font-size: 24px; }
+.stage-plan-lead > p { max-width: 860px; font-size: 18px; line-height: 1.8; }
+.stage-plan-constraints { padding: 25px 34px 30px; }
+.stage-plan-constraints .stage-constraints { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--ink); }
+.stage-plan-constraints .stage-constraints article { min-height: 150px; padding: 15px 16px 12px 0; border-right: 1px solid #c7c0b5; margin-right: 16px; }
+.stage-plan-constraints .stage-constraints article:last-child { border-right: 0; margin-right: 0; }
+.stage-plan-constraints article > span { display: block; color: var(--orange); font-size: 11px; font-weight: 900; margin-bottom: 12px; }
+.stage-plan-constraints article strong { display: block; color: var(--ink); font-size: 14px; }
+.stage-plan-constraints article p { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.stage-plan-arrangement { padding: 27px 34px 34px !important; }
+.stage-plan-arrangement > h3 { font-size: 25px; }
+.stage-plan-arrangement .stage-plan-layout { grid-template-columns: 170px minmax(0, 1fr); gap: 24px; }
+.stage-plan-arrangement .stage-period-nav { border-right: 1px solid var(--ink); padding-right: 18px; }
+.stage-plan-arrangement .stage-period-nav button { border: 0; border-left: 4px solid transparent; border-radius: 0; text-align: left; padding: 13px 10px; background: transparent; }
+.stage-plan-arrangement .stage-period-nav button.active { border-left-color: var(--orange); background: var(--ink); color: var(--lime); }
+.stage-plan-arrangement .stage-plan-columns { gap: 0; border: 1px solid var(--ink); }
+.stage-plan-arrangement .stage-column { border-radius: 0; padding: 18px; }
+.stage-plan-arrangement .stage-column.main { border-right: 1px solid var(--ink); }
+.stage-plan-arrangement .stage-period-card { border-radius: 0; border-color: #c7c0b5; }
+.stage-plan-coordination { padding: 26px 34px 30px !important; }
+.stage-plan-coordination .stage-coordination { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; padding-left: 0; list-style: none; }
+.stage-plan-coordination .stage-coordination li { padding-top: 12px; border-top: 3px solid var(--orange); color: var(--ink); font-size: 13px; line-height: 1.75; }
+.stage-plan-dossier .anxiety-plan { margin: 0; padding: 28px 34px 34px; background: #fffdf8; border-top: 8px solid var(--lime); }
+.stage-plan-dossier .anxiety-plan h3 { font-size: 23px; }
+.stage-plan-actions { margin-top: 24px; }
+@media (max-width: 900px) {
+  .stage-plan-constraints .stage-constraints { grid-template-columns: 1fr 1fr; }
+  .stage-plan-constraints .stage-constraints article:nth-child(2) { border-right: 0; margin-right: 0; }
+  .stage-plan-arrangement .stage-plan-layout { grid-template-columns: 1fr; }
+  .stage-plan-arrangement .stage-period-nav { border-right: 0; border-bottom: 1px solid var(--ink); padding: 0 0 10px; }
+  .stage-plan-arrangement .stage-plan-columns { grid-template-columns: 1fr; }
+  .stage-plan-arrangement .stage-column.main { border-right: 0; border-bottom: 1px solid var(--ink); }
+  .stage-plan-coordination .stage-coordination { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .stage-plan-dossier { margin-top: 18px; box-shadow: 6px 6px 0 rgba(21,21,21,.12); }
+  .stage-plan-lead, .stage-plan-constraints, .stage-plan-arrangement, .stage-plan-coordination, .stage-plan-dossier .anxiety-plan { padding-left: 18px !important; padding-right: 18px !important; }
+  .stage-plan-lead > p { font-size: 15px; }
+  .stage-plan-constraints .stage-constraints { grid-template-columns: 1fr; }
+  .stage-plan-constraints .stage-constraints article { border-right: 0; border-bottom: 1px solid #c7c0b5; margin-right: 0; min-height: auto; padding: 14px 0; }
+  .stage-plan-constraints .stage-constraints article:last-child { border-bottom: 0; }
+}
+
 /* 潮流杂志视觉层：仅覆盖颜色、排版、间距与呈现方式，不改变业务内容与交互逻辑。 */
 :root {
   --ink: #151515;

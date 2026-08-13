@@ -27,7 +27,7 @@ export interface PlanStage {
 }
 
 /** Bump this whenever the saved-plan structure changes in a way that must not be reused. */
-export const STAGE_PLAN_VERSION = 4;
+export const STAGE_PLAN_VERSION = 5;
 
 export interface AnxietyResponse {
   fixedMessage?: string;
@@ -117,7 +117,8 @@ function rankAdvice(rank: string) {
   return "识别真正构成门槛的课程或能力，避免无差别补齐所有短板。";
 }
 
-type PlanTrack = { name: string; nodes: EducationNode[]; preparatory: { title: string; steps: string[] }[] };
+type ExecutionTrack = "exam" | "recommendation" | "employment" | "civil_service" | "institution" | "content" | "opc";
+type PlanTrack = { key: ExecutionTrack; name: string; nodes: EducationNode[]; preparatory: { title: string; steps: string[] }[] };
 
 const PREPARATORY: Record<TrackKey, { title: string; steps: string[] }[]> = {
   further_study: [
@@ -154,24 +155,81 @@ function completion(title: string) { return [`能说明“${title}”的当前�
 function mainTrack(path: TrackKey, subtrack?: string): PlanTrack {
   if (path === "further_study") {
     const recommendation = subtrack === "保研";
-    return { name: recommendation ? "保研" : "考研", nodes: EDUCATION_PATHS[recommendation ? "recommendation" : "exam"].nodes, preparatory: PREPARATORY.further_study };
+    return { key: recommendation ? "recommendation" : "exam", name: recommendation ? "保研" : "考研", nodes: EDUCATION_PATHS[recommendation ? "recommendation" : "exam"].nodes, preparatory: PREPARATORY.further_study };
   }
-  if (path === "public_sector") return { name: "公务员", nodes: PUBLIC_PATHS.civil_service.nodes, preparatory: PREPARATORY.public_sector };
-  if (path === "employment") return { name: "校招", nodes: EMPLOYMENT_PATH.nodes, preparatory: PREPARATORY.employment };
-  return { name: "自主发展", nodes: INDEPENDENT_PATHS.content.nodes, preparatory: PREPARATORY.independent };
+  if (path === "public_sector") {
+    const institution = subtrack === "事业单位";
+    return { key: institution ? "institution" : "civil_service", name: institution ? "事业单位" : "公务员", nodes: PUBLIC_PATHS[institution ? "institution" : "civil_service"].nodes, preparatory: PREPARATORY.public_sector };
+  }
+  if (path === "employment") return { key: "employment", name: "校招", nodes: EMPLOYMENT_PATH.nodes, preparatory: PREPARATORY.employment };
+  return { key: "content", name: "内容创作", nodes: INDEPENDENT_PATHS.content.nodes, preparatory: PREPARATORY.independent };
 }
 
 function sideTrack(path: SidePath): PlanTrack {
-  return { name: path === "opc" ? "OPC 一人公司" : "内容创作", nodes: INDEPENDENT_PATHS[path as IndependentPathKey].nodes, preparatory: SIDE_PREPARATORY[path] };
+  return { key: path, name: path === "opc" ? "OPC 一人公司" : "内容创作", nodes: INDEPENDENT_PATHS[path as IndependentPathKey].nodes, preparatory: SIDE_PREPARATORY[path] };
 }
 
-function nodeGoal(node: EducationNode, period: string, isSide: boolean): StageGoal {
-  const requirements = node.requirements.slice(0, 1).map((item) => `核验进入条件：${item}`);
+function actionSteps(track: ExecutionTrack, title: string): string[] {
+  const t = title;
+  if (track === "employment") {
+    if (/实习/.test(t)) return ["筛选 10 个目标实习岗位并记录 JD 要求", "把简历中的项目改写成问题—行动—结果", "按岗位能力补齐一个可展示的技能或项目", "每周完成定量投递并记录回复与面试反馈"];
+    if (/简历|材料/.test(t)) return ["确定 1—2 个目标岗位并收集 10 条 JD", "完成一页针对岗位关键词的简历", "准备成绩单、作品/项目和证明材料", "请一位从业者或学长学姐逐条反馈并修改"];
+    if (/投递/.test(t)) return ["建立冲刺、匹配、保底三档岗位表", "按截止日期完成网申、内推和材料提交", "针对每个 JD 调整简历关键词", "记录投递状态并在未通过后复盘原因"];
+    if (/面试/.test(t)) return ["为每个目标岗位准备 3 个项目 STAR 案例", "完成专业题、行为题和自我介绍的模拟面试", "记录每轮追问并补齐岗位能力", "面试后 24 小时内复盘并更新答案库"];
+    return ["从招聘平台收集 20 条目标岗位 JD", "统计高频技能、工具和经历要求", "选定 1—2 个目标岗位并列出能力缺口", "安排学习、项目和实习的补齐顺序"];
+  }
+  if (track === "exam") {
+    if (/规划|信息|院校|专业|择校/.test(t)) return ["确定报考专业与考试科目", "建立 5—8 所院校的分数线、报录比和专业课对比表", "下载招生简章、专业目录、参考书和历年真题", "确定冲刺、匹配、保底目标并写下调整条件"];
+    if (/备考/.test(t)) return ["把政治、英语、数学/专业课拆成月计划和周计划", "完成基础教材、章节练习与错题整理", "每周安排一次限时训练并复盘薄弱点", "根据进度调整下一周学习量"];
+    if (/报名/.test(t)) return ["核对报考点、专业代码、考试科目和学历信息", "按公告准备身份证、学生证等材料", "在系统完成报名、缴费和网上确认", "下载准考证并逐项检查考场信息"];
+    if (/初试|笔试/.test(t)) return ["按考试科目进行整套真题限时训练", "模拟真实考试安排答题顺序和时间", "整理错题与失分原因并进行二次训练", "考后记录估分并同步准备复试/调剂材料"];
+    if (/复试|调剂|成绩/.test(t)) return ["查询成绩、国家线和目标院校复试线", "准备专业问答、英语口语和项目经历表达", "整理复试材料并联系目标院校确认要求", "未进入一志愿时按截止时间筛选调剂"];
+    return ["按节点要求列出待办清单", "完成本节点必须提交或训练的任务", "保存报名、学习或考试过程证据", "根据结果决定进入下一节点或调整目标"];
+  }
+  if (track === "recommendation") {
+    if (/资格|审核|公示/.test(t)) return ["向学院获取最新推免细则和排名计算方式", "核算前四/五学期绩点、排名、英语和挂科情况", "整理加分、竞赛、科研和证明材料", "向辅导员确认资格边界与异议处理流程"];
+    if (/绩点|科研|积累/.test(t)) return ["制定核心课程提分和绩点保稳计划", "联系导师加入科研并明确可交付成果", "完成一项高质量竞赛/论文/项目并留存证明", "参加英语考试并持续更新成果清单"];
+    if (/夏令营|预推免/.test(t)) return ["建立目标院校清单并记录申请截止日期", "按模板准备个人陈述、简历、成绩单和推荐信", "完成专业基础与英语面试模拟", "提交后记录结果并及时调整下一批申请"];
+    if (/录取|确认|毕业/.test(t)) return ["核对系统填报、确认待录取和材料提交时限", "按院校要求完成复试、体检、档案和政审事项", "保存录取确认与毕业衔接凭证", "逐项完成报到前的档案、户口和入学准备"];
+    return ["核对本节点对应的推免资格要求", "完成一项绩点、科研或材料准备任务", "保存可核验的排名、成果或申请记录", "根据反馈调整下一所目标院校"];
+  }
+  if (track === "civil_service") {
+    if (/决策|方向/.test(t)) return ["对照国考与省考公告，比较机关层级、地域和岗位限制", "从职位表筛出冲刺、匹配、保底岗位并完成初步选岗", "核验专业、学历、应届身份和基层经历", "确定先参加国考、再衔接省考的备考节奏"];
+    if (/选岗|报名/.test(t)) return ["下载国考/省考职位表并建立筛选表", "逐项核验专业、户籍、政治面貌和基层经历", "按公告完成报名、资格审查和缴费", "保存报名编号、准考证和材料凭证"];
+    if (/备考/.test(t)) return ["将行测分模块刷题并记录正确率与速度", "按申论题型完成概括、综合分析和大作文训练", "每周完成至少一套限时模考", "根据错题复盘调整国考与省考衔接计划"];
+    if (/笔试/.test(t)) return ["按准考证确认考点、科目和入场材料", "完成行测整卷与申论套题限时模拟", "考后复盘失分模块并估分", "根据成绩决定是否进入下一场省考或面试准备"];
+    if (/面试/.test(t)) return ["整理岗位职责和时政热点答题素材", "练习结构化题型并录音复盘", "完成 3 次全真模拟和追问训练", "按国考/省考通知准备资格复审材料"];
+    return ["按招录机关通知准备体检、政审和档案材料", "核对公示、报到与入职时间", "保存每个环节的提交凭证", "如有多条录用结果，比较岗位后再确认去向"];
+  }
+  if (track === "institution") {
+    if (/决策|方向|信息|筛选/.test(t)) return ["关注人社部门、主管部门和单位官网公告", "按地区、单位类别和专业建立岗位清单", "逐项核验学历、专业、年龄、资格证和户籍要求", "确定冲刺、匹配、保底岗位并标记报名截止日"];
+    if (/报名|审核/.test(t)) return ["准备身份证、学历学位和资格证明扫描件", "按公告完成报名、资格审查和缴费", "核对考试类别、准考证打印与资格复审要求", "保存报名编号和审核结果"];
+    if (/笔试|备考/.test(t)) return ["按岗位类别学习职测对应模块", "针对综应、公基或专业科目建立题型清单", "每周完成整套限时练习并复盘", "根据公告调整科目权重和复习顺序"];
+    if (/面试/.test(t)) return ["确认岗位采用结构化、试讲说课还是专业技能测试", "准备岗位相关案例和自我介绍", "完成至少 3 次限时模拟并录音复盘", "按资格复审清单准备原件和证明材料"];
+    return ["按招聘单位通知准备体检、考察和档案材料", "核对公示、聘用合同和报到时间", "确认编制/备案及试用期性质", "保存入职材料并记录岗位适应问题"];
+  }
+  if (track === "content") {
+    if (/定位|规划/.test(t)) return ["确定一个细分主题、目标受众和主平台", "建立不少于 20 个可持续选题的选题库", "制定每周发布频率和单条内容结构", "完成 3 条低成本试作并记录反馈"];
+    if (/发布|运营|产出/.test(t)) return ["按固定频率完成选题、制作和发布", "为每条内容记录曝光、完播、互动和涨粉数据", "每周复盘表现最好的主题与开头", "保留有效方向并迭代下一组内容"];
+    if (/商业|变现|合作/.test(t)) return ["整理作品集和账号数据截图", "主动联系 5 个潜在合作方或客户", "明确报价、交付范围和修改次数", "复盘每次合作的收益与时间成本"];
+    return ["围绕节点目标完成一组内容作品", "发布后收集真实数据和用户反馈", "根据数据修改选题或表达方式", "保存作品链接与复盘记录"];
+  }
+  if (track === "opc") {
+    if (/能力|赛道|需求/.test(t)) return ["盘点可独立交付的技能和可触达客户场景", "访谈至少 3 位潜在用户并记录付费问题", "选择一个一周内可完成的最小服务", "写清交付范围、价格和验证指标"];
+    if (/工具|产能/.test(t)) return ["搭建完成一次交付所需的最小工具链", "用真实任务测试从需求到交付的完整流程", "记录耗时、返工点和工具成本", "删掉不能提升结果的复杂工具"];
+    if (/客户|副业|交付|服务/.test(t)) return ["联系潜在客户并确认具体需求和预算", "完成一次试单并按约定交付", "收集反馈、案例和可公开证明", "根据交付耗时调整服务边界与报价"];
+    if (/获客|现金流|收入/.test(t)) return ["建立内容、转介绍或平台获客渠道", "每周记录线索、成交、回款和成本", "区分营收、利润与工具/外包支出", "根据数据决定继续、收缩或转型"];
+    return ["拆解本节点的交付目标并列出待办", "完成一次真实用户验证或交付", "记录反馈、时间和成本", "根据结果决定下一轮投入"];
+  }
+  return ["完成本节点最重要的一项实际任务", "保存过程证据和结果反馈", "复盘未完成原因并调整下一步", "按官方规则或用户反馈决定是否进入下一节点"];
+}
+
+function nodeGoal(track: PlanTrack, node: EducationNode, period: string, isSide: boolean): StageGoal {
   const capability = node.capabilities.slice(0, 2).join("、");
   return {
     title: node.title,
     reason: `${period}对应推演节点“${node.title}”：${node.summary}`,
-    steps: [`核对该节点的时间窗口：${node.time}`, ...requirements, `重点训练：${capability}。`, `完成并留存与“${node.title}”相关的一项可验证成果或过程记录`, `提前处理主要风险：${node.risks[0] ?? "按当年规则核验"}`].slice(0, 5),
+    steps: actionSteps(track.key, node.title),
     completionCriteria: [node.requirements[0] ? `已核验：${node.requirements[0]}` : `已完成“${node.title}”的条件核验`, `已形成与节点能力“${capability}”相关的记录或成果`],
     riskTip: node.risks[0] ?? (isSide ? "未获得真实反馈前，不增加高额投入。" : "以当年官方规则和实际反馈校正计划。"),
     sourceFactors: [node.title, node.time, ...node.capabilities.slice(0, 2)],
@@ -191,7 +249,7 @@ function goalsForStage(track: PlanTrack, sourcePeriod: AcademicPeriod, period: s
   const nodeCount = track.nodes.length;
   const start = sourcePeriod === "大三上" ? 0 : sourcePeriod === "大三下" ? Math.max(1, Math.floor(nodeCount / 3)) : Math.max(2, Math.floor(nodeCount * 2 / 3));
   const end = sourcePeriod === "大三上" ? Math.min(nodeCount, Math.max(2, Math.ceil(nodeCount / 3))) : sourcePeriod === "大三下" ? Math.min(nodeCount, Math.max(start + 1, Math.ceil(nodeCount * 2 / 3))) : nodeCount;
-  return track.nodes.slice(start, end).slice(0, 2).map((node) => nodeGoal(node, period, isSide));
+  return track.nodes.slice(start, end).slice(0, 2).map((node) => nodeGoal(track, node, period, isSide));
 }
 
 export function buildStagePlan(profile: StudentProfileInput, mainPath: TrackKey, sidePath: SidePath, now = new Date(), mainSubtrack?: string): StagePlan {

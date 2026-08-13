@@ -228,7 +228,7 @@ export function SandboxApp() {
             const planResponse = await fetch("/api/stage-plan");
             if (planResponse.ok) {
               const planData = await planResponse.json();
-              if (planData.plan && (planData.plan as StagePlan).schemaVersion === 4) {
+              if (planData.plan && (planData.plan as StagePlan).schemaVersion === 5) {
                 setStagePlan(planData.plan as StagePlan);
                 setPlanSaved(true);
               }
@@ -522,8 +522,8 @@ export function SandboxApp() {
         <button className="brand" onClick={() => navigateTo("welcome")}>
           <span className="brand-mark"><Network size={18} /></span>
           <span>
-            <strong>AI成长路径沙盘</strong>
-            <small>让重大选择有证据可循</small>
+            <strong>路上见</strong>
+            <small>陪你把每一步都照亮</small>
           </span>
         </button>
         <div className="topbar-actions">
@@ -746,12 +746,14 @@ function StagePlanPage({ plan, saved, onBack, onRegenerate, onSave, onDownloadMa
   const activeSideStage = plan.sideStages[activeIndex];
   return <section className="content-container stage-plan-page">
     <div className="page-heading stage-plan-heading"><div><button className="ghost-button" onClick={onBack}><ArrowLeft size={16} /> 返回四轨推演</button><span className="eyebrow">STEP 04 · 系统性阶段方案</span><h2>你的双路径成长方案</h2><p>以主路径为优先，成长副线保持低投入验证；它不是对结果的承诺。</p></div>{saved && <span className="save-badge"><Check size={15} /> 已保存最新版本</span>}</div>
-    <div className="stage-plan-summary"><div><small>当前起点</small><strong>{plan.effectivePeriod}</strong></div><div><small>当前阶段</small><strong>{plan.currentStage}</strong></div><div><small>主路径</small><strong>{STAGE_MAIN_NAMES[plan.mainPath]}</strong></div><div><small>成长副线</small><strong>{STAGE_SIDE_NAMES[plan.sidePath]}</strong></div><div className="stage-plan-end"><small>规划终点</small><strong>{plan.planningEnd}</strong></div></div>
-    <section className="stage-plan-block"><h3>方案摘要</h3><p>{plan.summary}</p></section>
-    <section className="stage-plan-block"><h3>现实约束与规划依据</h3><div className="stage-constraints">{plan.constraints.map((item) => <article key={item.title}><strong>{item.title}</strong><p>{item.analysis}</p></article>)}</div></section>
-    <section className="stage-plan-block"><h3>双路径阶段安排</h3><p className="stage-plan-hint">选择一个阶段，查看该阶段内主路径与成长副线的完整安排。</p><div className="stage-plan-layout"><nav className="stage-period-nav" aria-label="阶段导航">{plan.mainStages.map((stage, index) => <button type="button" key={stage.period} className={index === activeIndex ? "active" : ""} onClick={() => setActiveStageIndex(index)}><span>阶段 {String(index + 1).padStart(2, "0")}</span>{stage.period}</button>)}</nav><div className="stage-plan-columns"><StageColumn title={`主路径｜${STAGE_MAIN_NAMES[plan.mainPath]}`} stage={activeMainStage} tone="main" /><StageColumn title={`成长副线｜${STAGE_SIDE_NAMES[plan.sidePath]}`} stage={activeSideStage} tone="side" /></div></div></section>
-    <section className="stage-plan-block"><h3>主副路径协调建议</h3><ul className="stage-coordination">{plan.coordination.map((item) => <li key={item}>{item}</li>)}</ul></section>
-    {plan.anxiety && <section className="stage-plan-block anxiety-plan"><h3>开发者寄语：对当前焦虑的回应</h3>{plan.anxiety.fixedMessage ? <p className="fixed-anxiety-message">{plan.anxiety.fixedMessage}</p> : <><p><strong>我理解到的担心：</strong>{plan.anxiety.understanding}</p><p><strong>现实判断：</strong>{plan.anxiety.reality}</p><p><strong>可以先做的事：</strong></p><ol className="anxiety-suggestions">{plan.anxiety.suggestions?.map((item) => <li key={item}>{item}</li>)}</ol><p><strong>与方案的连接：</strong>{plan.anxiety.planConnection}</p><p className="anxiety-message">{plan.anxiety.message}</p></>}</section>}
+    <div className="stage-plan-dossier">
+      <div className="stage-plan-summary"><div><small>当前起点</small><strong>{plan.effectivePeriod}</strong></div><div><small>当前阶段</small><strong>{plan.currentStage}</strong></div><div><small>主路径</small><strong>{STAGE_MAIN_NAMES[plan.mainPath]}</strong></div><div><small>成长副线</small><strong>{STAGE_SIDE_NAMES[plan.sidePath]}</strong></div><div className="stage-plan-end"><small>规划终点</small><strong>{plan.planningEnd}</strong></div></div>
+      <section className="stage-plan-block stage-plan-lead"><h3>方案摘要</h3><p>{plan.summary}</p></section>
+      <section className="stage-plan-block stage-plan-constraints"><h3>现实约束与规划依据</h3><div className="stage-constraints">{plan.constraints.map((item, index) => <article key={item.title}><span>0{index + 1}</span><strong>{item.title}</strong><p>{item.analysis}</p></article>)}</div></section>
+      <section className="stage-plan-block stage-plan-arrangement"><h3>双路径阶段安排</h3><p className="stage-plan-hint">选择一个阶段，查看该阶段内主路径与成长副线的完整安排。</p><div className="stage-plan-layout"><nav className="stage-period-nav" aria-label="阶段导航">{plan.mainStages.map((stage, index) => <button type="button" key={stage.period} className={index === activeIndex ? "active" : ""} onClick={() => setActiveStageIndex(index)}><span>阶段 {String(index + 1).padStart(2, "0")}</span>{stage.period}</button>)}</nav><div className="stage-plan-columns"><StageColumn title={`主路径｜${STAGE_MAIN_NAMES[plan.mainPath]}`} stage={activeMainStage} tone="main" /><StageColumn title={`成长副线｜${STAGE_SIDE_NAMES[plan.sidePath]}`} stage={activeSideStage} tone="side" /></div></div></section>
+      <section className="stage-plan-block stage-plan-coordination"><h3>主副路径协调建议</h3><ul className="stage-coordination">{plan.coordination.map((item) => <li key={item}>{item}</li>)}</ul></section>
+      {plan.anxiety && <section className="stage-plan-block anxiety-plan"><h3>开发者寄语：对当前焦虑的回应</h3>{plan.anxiety.fixedMessage ? <p className="fixed-anxiety-message">{plan.anxiety.fixedMessage}</p> : <><p><strong>我理解到的担心：</strong>{plan.anxiety.understanding}</p><p><strong>现实判断：</strong>{plan.anxiety.reality}</p><p><strong>可以先做的事：</strong></p><ol className="anxiety-suggestions">{plan.anxiety.suggestions?.map((item) => <li key={item}>{item}</li>)}</ol><p><strong>与方案的连接：</strong>{plan.anxiety.planConnection}</p><p className="anxiety-message">{plan.anxiety.message}</p></>}</section>}
+    </div>
     <div className="stage-plan-actions"><div><strong>{saved ? "已保存这份最新方案" : "阶段方案"}</strong></div><div><button className="secondary-button" onClick={onRegenerate}><RefreshCw size={16} /> 重新生成</button><button className="primary-button" onClick={onSave}><Check size={16} /> 保存方案</button><button className="ghost-button" onClick={onDownloadMarkdown}>下载 Markdown</button><button className="ghost-button" onClick={onDownloadDocx}>下载 Word</button></div></div>
   </section>;
 }
