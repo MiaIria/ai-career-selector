@@ -129,6 +129,9 @@ MVP 不实现：成绩单/简历文件解析、课程销售、人工规划师服
 
 ## 14. 变更记录
 
+- 2026-08-15：完成 Neon/Vercel 合并前审查修复：健康检查改为真实探测 PostgreSQL，数据库不可用时返回 503，并新增成功/失败接口测试；为已登记的初始 migration 新增兼容式前向迁移，在不篡改历史 migration 的前提下清理已废弃的飞书令牌列，该迁移已成功应用到 Neon，迁移状态最新且废弃字段均不存在；删除不安全且不再需要的 Vercel 环境变量批量同步脚本；同步修正 Vercel 根目录、数据库验收、迁移命令、密钥安全及已删除脚本等部署与 README 文档。25 项测试、ESLint、TypeScript、Prisma 校验与 Next.js 生产构建均通过。继续由用户自行完成 Git 暂存、提交、推送与分支合并，不修改 `PROJECT_MEMORY.md`。
+
+- 2026-08-15：用户确认并完成 Neon PostgreSQL 空库初始化上线准备：保留本地 SQLite 仅作开发备份，不迁移既有测试数据；Neon 的零数据旧 schema 已清理飞书残留并登记 PostgreSQL 初始 Prisma migration。移除剩余飞书 OAuth 路由、封装与未使用字段；部署配置改为 Vercel 构建不执行 `db push --accept-data-loss`，生产结构变更统一使用 `prisma migrate deploy`。Neon migration status、23 项测试、ESLint 与 Next.js 生产构建均通过。
 - 2026-08-14：按用户确认统一运行中面向用户的产品名称：登录弹窗、浏览器页面标题和公开 README 标题由“AI成长路径沙盘”更新为“路上见”。保留 `PROJECT_MEMORY.md`、历史方案文档、Git 提交记录及尚未确定的新仓库技术标识中的旧名称。
 
 - 2026-08-14：按用户确认完成停止接入飞书的清理：移除飞书 OAuth 路由、飞书 API 封装、`FeishuResource` 表、用户表中的飞书身份与令牌字段、飞书环境变量及相关运行时文案；保留 `SESSION_SECRET`、手机号/邮箱登录、用户画像、辅助决策、四轨推演、路径保存与阶段方案功能。Prisma 已同步本地 SQLite，历史飞书资源记录和飞书关联字段已不可逆删除；数据库自检确认 2 个用户及其画像、辅助决策缓存、四轨快照和决策记录仍存在。TypeScript、23 项测试、ESLint 与 Next.js 生产构建均通过，运行时目录已无飞书引用；`产品方案.md` 作为原始历史方案保留其历史表述。
