@@ -153,7 +153,6 @@ export async function POST(request: Request) {
       }
 
       // 覆盖旧方案前先清理所有依赖；事务中任一步失败都会整体回滚。
-      await tx.feishuResource.deleteMany({ where: { userId } });
       await tx.decisionRecord.deleteMany({ where: { userId } });
       if (profileChanged || selectionChanged) await tx.stagePlan.deleteMany({ where: { userId } });
       await tx.studentProfile.upsert({

@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
 const COOKIE_NAME = "growth_sandbox_session";
@@ -48,25 +48,3 @@ export async function clearSession() {
   store.delete(COOKIE_NAME);
 }
 
-function encryptionKey() {
-  return createHmac("sha256", secret()).update("feishu-token-encryption").digest();
-}
-
-export function encryptToken(value: string) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
-  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return [iv, tag, encrypted].map((item) => item.toString("base64url")).join(".");
-}
-
-export function decryptToken(value: string) {
-  const [ivPart, tagPart, encryptedPart] = value.split(".");
-  if (!ivPart || !tagPart || !encryptedPart) throw new Error("令牌密文格式错误");
-  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(ivPart, "base64url"));
-  decipher.setAuthTag(Buffer.from(tagPart, "base64url"));
-  return Buffer.concat([
-    decipher.update(Buffer.from(encryptedPart, "base64url")),
-    decipher.final(),
-  ]).toString("utf8");
-}

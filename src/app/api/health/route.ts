@@ -7,8 +7,5 @@ export async function GET() {
     minimaxConfigured: Boolean(
       process.env.MINIMAX_API_KEY && process.env.MINIMAX_BASE_URL,
     ),
-    feishuConfigured: Boolean(
-      process.env.FEISHU_APP_ID && process.env.FEISHU_APP_SECRET,
-    ),
   });
 }
