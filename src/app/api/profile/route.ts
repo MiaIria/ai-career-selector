@@ -5,7 +5,7 @@ import { getSessionUserId } from "@/lib/session";
 // 画像只能随最终决策整体写入；本接口仅用于读取，防止产生半成品记录。
 export async function GET() {
   const userId = await getSessionUserId();
-  if (!userId) return NextResponse.json({ error: "请先使用飞书登录" }, { status: 401 });
+  if (!userId) return NextResponse.json({ error: "请先登录" }, { status: 401 });
   return NextResponse.json({
     profile: await prisma.studentProfile.findUnique({ where: { userId } }),
   });

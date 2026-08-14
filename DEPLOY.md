@@ -48,14 +48,12 @@ neon projects create \
 # 运行时连接（pooled + prisma 参数）：
 neon connection-string --prisma --pooled
 
-# 直连（仅给 prisma db push / migrate 使用）：
+# 直连（仅给 Prisma migration 使用）：
 neon connection-string
 
-# 推荐保存到临时变量，避免来回复制粘贴
+# 推荐保存到临时变量，避免来回复制粘贴。不要把连接串输出到终端或日志。
 export DATABASE_URL=$(neon connection-string --prisma --pooled)
 export DIRECT_URL=$(neon connection-string)
-echo "DATABASE_URL=$DATABASE_URL"
-echo "DIRECT_URL=$DIRECT_URL"
 ```
 
 把两条连接串填入下表（**不要直接打印到聊天里**）：
@@ -63,7 +61,7 @@ echo "DIRECT_URL=$DIRECT_URL"
 | 名称 | 用途 | 标志 |
 | --- | --- | --- |
 | `DATABASE_URL` | 应用运行时（Pooled） | `neon connection-string --prisma --pooled` |
-| `DIRECT_URL` | Prisma DDL（`db push`） | `neon connection-string` |
+| `DIRECT_URL` | Prisma migration 使用的直连 | `neon connection-string` |
 
 > 之所以区分两条：Prisma 在 Neon 的 pooled 连接上跑 DDL 会失败（PgBouncer 事务模式下不支持 PREPARE），所以 schema 同步必须走直连，运行时查询走池化。
 
@@ -108,7 +106,7 @@ vercel link --yes
 ### 方案 B：在 Web 控制台手动创建
 1. 打开 https://vercel.com/new
 2. Import `MiaIria/ai-career-selector` 仓库
-3. **Root Directory** 必须填 `app`（仓库里 app/ 才是 Next.js 项目根）
+3. **Root Directory** 保持默认的 `./`（当前仓库根目录就是 Next.js 项目根）
 4. Framework Preset 选 Next.js（自动检测）
 
 ---
@@ -134,7 +132,7 @@ vercel env add SESSION_SECRET production <<< "$SESSION_SECRET"
 
 或者直接在 Vercel 控制台 → Project → Settings → Environment Variables 逐条填写。
 
-> 安全提醒：本地 `.env.local` 中的旧密钥已在本对话中暴露过，建议部署完成**后**在飞书开发者后台和 MiniMax 控制台轮换一次。
+> 安全提醒：不要复用已公开、已发送到聊天或已写入日志的密钥。若怀疑 MiniMax 密钥已经泄露，应先在 MiniMax 控制台撤销旧密钥，再把新密钥写入 Vercel。项目已经停止接入飞书，无需配置或轮换飞书密钥。
 
 ---
 
@@ -156,7 +154,7 @@ vercel deploy --prod
 | 场景 | 期望 |
 | --- | --- |
 | 打开 `/` | 首页能加载，无 500 |
-| `/api/health` | 返回 `{ ok: true }`，看到 `database` 段显示已连接 |
+| `/api/health` | HTTP 200，返回 `status: "ok"` 和 `database: "connected"`；数据库不可用时返回 HTTP 503 |
 | 游客模式：完成画像 → 四轨推演 | 进度能保存到浏览器；**不要**依赖飞书 |
 | 决策提交 + 阶段方案生成 | 数据库能查到 `DecisionRecord` 和 `StagePlan` 记录 |
 | 邮箱/手机号注册与登录 | 能创建用户并在重新登录后恢复已保存方案 |
@@ -173,6 +171,6 @@ neon psql main -- -c "SELECT count(*) FROM \"User\";"
 ## 8. 常见问题
 
 - **构建报 "PrismaClientInitializationError"**：通常是 `DATABASE_URL` / `DIRECT_URL` 没读到，或直连串写成了 pooled。
-- **构建报 "prepared statement already exists"**：把 `DATABASE_URL` 换成 pooled 直连（用 `neon connection-string --prisma --pooled`）。
+- **构建报 "prepared statement already exists"**：把 `DATABASE_URL` 换成 pooled 连接（用 `neon connection-string --prisma --pooled`）。
 - **冷启动慢**：是 Serverless 正常现象，第一次访问会编译，约 1~3s。
 - **本地跑 `next dev` 想连 Neon**：把 `app/.env.local` 也填上 Neon 两条连接串即可，不再依赖 dev.db。

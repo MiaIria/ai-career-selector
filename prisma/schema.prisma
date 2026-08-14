@@ -9,22 +9,19 @@ datasource db {
 }
 
 model User {
-  id                String           @id @default(cuid())
-  email             String?          @unique
-  phone             String?          @unique
-  passwordHash      String?
-  name              String?
-  avatarUrl         String?
-  accessToken       String?
-  refreshToken      String?
-  tokenExpiresAt    DateTime?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  profile           StudentProfile?
+  id                   String                   @id @default(cuid())
+  email                String?                  @unique
+  phone                String?                  @unique
+  passwordHash         String?
+  name                 String?
+  avatarUrl            String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  profile              StudentProfile?
   decisionSupportCache DecisionSupportCache?
-  simulationSnapshot PathSimulationSnapshot?
-  decision          DecisionRecord?
-  stagePlan         StagePlan?
+  simulationSnapshot  PathSimulationSnapshot?
+  decision             DecisionRecord?
+  stagePlan            StagePlan?
 }
 
 model DecisionSupportCache {

@@ -1,4 +1,4 @@
-# AI 成长路径沙盘（ai-career-selector）
+# 路上见（ai-career-selector）
 
 > 帮大学生在毕业前，把几条可能的出路**先演练一遍、看清代价和风险，再做决定**。
 
@@ -18,8 +18,8 @@ npm install
 cp .env.example .env.local
 cp .env.example .env
 
-# 4. 初始化本地数据库
-npm run db:push
+# 4. 将已登记的 migration 应用到 PostgreSQL
+npm run db:migrate:deploy
 
 # 5. 启动
 npm run dev
@@ -30,8 +30,8 @@ npm run dev
 ### 注意事项
 
 - **Node.js 需 ≥ 20.9**（推荐 22 LTS），版本过低会在构建阶段报错。
-- **第 3 步的两份配置文件都要复制。** Next.js 运行时读 `.env.local`，而 Prisma 命令只读 `.env`，少复制一份会导致 `npm run db:push` 找不到数据库地址。两份文件均已被 `.gitignore` 忽略，不会误提交。
-- **不填任何密钥也能完整体验。** 未配置 MiniMax 时，路径推演会自动回退到内置规则引擎；未配置飞书时，可用游客模式免登录使用，进度保留在浏览器本地。
+- **第 3 步的两份配置文件都要复制。** Next.js 运行时读 `.env.local`，Prisma 命令读 `.env`；两份文件都需要填写 `DATABASE_URL` 和 `DIRECT_URL`。开发环境应使用独立的 Neon 开发库或分支，不要指向生产库。两份文件均已被 `.gitignore` 忽略，不会误提交。
+- **不填 MiniMax 密钥也能体验。** 未配置 MiniMax 时，路径推演会自动回退到内置规则引擎；游客可免登录使用，进度仅保留在当前浏览器会话中。
 - 想确认当前配置状态，访问 `http://localhost:3000/api/health`。
 
 ---
@@ -65,7 +65,7 @@ npm run dev
 src/
 ├─ app/
 │  ├─ api/
-│  │  ├─ auth/feishu/       # 飞书 OAuth 入口与回调
+│  │  ├─ auth/              # 手机号/邮箱注册、登录与会话
 │  │  ├─ auth/session/      # 签名会话
 │  │  ├─ simulations/       # 四轨路径推演生成
 │  │  ├─ decision/commit/   # 决策单事务提交
@@ -78,14 +78,13 @@ src/
 │  ├─ path-rules.ts         # 路径规则引擎（含测试）
 │  ├─ decision.ts           # 四轨对比与排序（含测试）
 │  ├─ minimax.ts            # MiniMax 适配层
-│  ├─ feishu.ts             # 飞书 API
-│  ├─ session.ts            # 加密令牌与签名会话
+│  ├─ session.ts            # 签名会话
 │  └─ prisma.ts
 └─ types/
    └─ domain.ts             # 领域类型定义
 
 prisma/schema.prisma        # 数据模型
-scripts/db-safe-check.mjs   # 数据落库与令牌加密自检
+prisma/migrations/          # PostgreSQL 结构迁移记录
 ```
 
 ---
