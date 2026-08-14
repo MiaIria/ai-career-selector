@@ -10,6 +10,9 @@ datasource db {
 model User {
   id                String           @id @default(cuid())
   feishuOpenId      String?          @unique
+  email             String?          @unique
+  phone             String?          @unique
+  passwordHash      String?
   name              String?
   avatarUrl         String?
   accessToken       String?
@@ -18,11 +21,24 @@ model User {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
   profile           StudentProfile?
+  decisionSupportCache DecisionSupportCache?
   simulationSnapshot PathSimulationSnapshot?
   decision          DecisionRecord?
-  plan              MonthlyPlan?
-  reviews           WeeklyReview[]
+  stagePlan         StagePlan?
   feishuConnections FeishuResource[]
+}
+
+model DecisionSupportCache {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile            Json
+  profileFingerprint String
+  simulations        Json
+  generationMode     String
+  decisionSupport    Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model PathSimulationSnapshot {
@@ -73,54 +89,15 @@ model DecisionRecord {
   committedAt       DateTime @default(now())
 }
 
-model MonthlyPlan {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  track       String
-  subtrack    String
-  version     Int      @default(1)
-  startDate   DateTime
-  endDate     DateTime
-  rationale   String
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  tasks       Task[]
-}
-
-model Task {
-  id               String      @id @default(cuid())
-  planId           String
-  plan             MonthlyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  week             Int
-  title            String
-  description      String
-  estimatedMinutes Int
-  dueDate          DateTime
-  evidenceRequired String
-  status           String      @default("todo")
-  completionProof  String?
-  adoptedAt        DateTime?
-  completedAt      DateTime?
-  feishuRecordId   String?
-  feishuEventId    String?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-}
-
-model WeeklyReview {
-  id             String   @id @default(cuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  planId         String
-  week           Int
-  completionRate Int
-  changes        Json
-  blockers       Json
-  reflection     String?
-  adjustmentDiff Json
-  createdAt      DateTime @default(now())
+model StagePlan {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mainPath  String
+  sidePath  String
+  plan      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model FeishuResource {

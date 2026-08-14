@@ -8,10 +8,11 @@ export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get("state");
   const expectedState = request.cookies.get("feishu_oauth_state")?.value;
   const error = request.nextUrl.searchParams.get("error");
+  const popup = request.cookies.get("feishu_oauth_popup")?.value === "1";
 
-  if (error) return NextResponse.redirect(new URL(`/?auth_error=${encodeURIComponent(error)}`, request.url));
+  if (error) return finishPopupOrRedirect(request, popup, false, error);
   if (!code || !state || !expectedState || state !== expectedState) {
-    return NextResponse.redirect(new URL("/?auth_error=invalid_oauth_state", request.url));
+    return finishPopupOrRedirect(request, popup, false, "invalid_oauth_state");
   }
 
   try {
@@ -36,11 +37,26 @@ export async function GET(request: NextRequest) {
       },
     });
     await createSession(user.id);
-    const response = NextResponse.redirect(new URL("/?auth=success", request.url));
+    const response = popup ? popupResponse(true) : NextResponse.redirect(new URL("/?auth=success", request.url));
     response.cookies.delete("feishu_oauth_state");
+    response.cookies.delete("feishu_oauth_popup");
     return response;
   } catch (cause) {
     console.error("Feishu OAuth callback failed", cause instanceof Error ? cause.message : cause);
-    return NextResponse.redirect(new URL("/?auth_error=oauth_callback_failed", request.url));
+    return finishPopupOrRedirect(request, popup, false, "oauth_callback_failed");
   }
+}
+
+function finishPopupOrRedirect(request: NextRequest, popup: boolean, success: boolean, error?: string) {
+  const response = popup ? popupResponse(success, error) : NextResponse.redirect(new URL(`/?auth_error=${encodeURIComponent(error ?? "oauth_failed")}`, request.url));
+  response.cookies.delete("feishu_oauth_state");
+  response.cookies.delete("feishu_oauth_popup");
+  return response;
+}
+
+function popupResponse(success: boolean, error?: string) {
+  const payload = JSON.stringify({ type: "growth-sandbox-feishu-auth", success, error: error ?? null });
+  return new NextResponse(`<!doctype html><html><body><script>window.opener&&window.opener.postMessage(${payload},window.location.origin);window.close();</script><p>登录${success ? "成功" : "失败"}，可关闭此窗口。</p></body></html>`, {
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+  });
 }

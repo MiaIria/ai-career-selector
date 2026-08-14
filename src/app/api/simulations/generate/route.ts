@@ -5,18 +5,25 @@ import { callMiniMax, MiniMaxConfigurationError } from "@/lib/minimax";
 
 const ProfileSchema = z.object({
   school: z.string(),
-  major: z.string().min(1),
-  grade: z.string().min(1),
+  major: z.string(),
+  grade: z.string(),
   academicStanding: z.string(),
   interests: z.array(z.string()),
   skills: z.array(z.string()),
   experiences: z.array(z.string()),
   values: z.array(z.string()),
   targetCities: z.array(z.string()),
-  weeklyHours: z.number().min(1).max(80),
+  weeklyHours: z.number().min(0).max(80),
   monthlyBudget: z.number().min(0),
   constraints: z.array(z.string()),
   currentConfusion: z.string(),
+  questionnaire: z.object({
+    difficultyRanking: z.array(z.enum(["考/保研", "考公", "就业"])).length(3),
+    excludedDirections: z.array(z.enum(["考/保研", "考公", "就业"])).max(2),
+    exclusionChoiceMade: z.literal(true),
+    futureDirection: z.enum(["上班（包含公务员和事业单位）", "创业", "学者或研究人员"]),
+    answers: z.record(z.array(z.string())),
+  }),
 });
 
 export async function POST(request: Request) {

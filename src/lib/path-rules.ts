@@ -4,6 +4,7 @@ import {
   StudentProfileInput,
   TrackKey,
 } from "@/types/domain";
+import { questionnaireText } from "@/lib/profile-questionnaire";
 
 type Rule = {
   name: string;
@@ -54,7 +55,7 @@ export const TRACK_RULES: Record<TrackKey, Rule> = {
   independent: {
     name: "自主发展",
     terminalGoal: "完成需求验证并形成初步可持续收入模式",
-    subtracks: ["内容创作", "轻创业"],
+    subtracks: ["内容创作", "一人公司（OPC）"],
     nodeNames: ["方向与人群", "问题验证", "最小方案", "首批用户", "付费验证", "复购与持续性验证"],
     ruleUrl: "https://www.gov.cn/zhengce/",
     organization: "中国政府网政策文件库",
@@ -70,6 +71,7 @@ function selectSubtrack(track: TrackKey, profile: StudentProfileInput) {
     ...profile.skills,
     ...profile.experiences,
     profile.currentConfusion,
+    ...questionnaireText(profile.questionnaire),
   ].join(" ");
   const choices = TRACK_RULES[track].subtracks;
 
@@ -93,7 +95,17 @@ function scoreTrack(track: TrackKey, profile: StudentProfileInput) {
     ...profile.experiences,
     ...profile.values,
     profile.currentConfusion,
+    ...questionnaireText(profile.questionnaire),
   ].join(" ");
+
+  const excludedForTrack: Partial<Record<TrackKey, string>> = {
+    further_study: "考/保研",
+    public_sector: "考公",
+    employment: "就业",
+  };
+  if (excludedForTrack[track] && profile.questionnaire?.excludedDirections.includes(excludedForTrack[track]!)) {
+    return 20;
+  }
 
   const keywords: Record<TrackKey, RegExp> = {
     further_study: /研究|学习|学历|专业|科研|考研|保研|学术/,
@@ -107,7 +119,7 @@ function scoreTrack(track: TrackKey, profile: StudentProfileInput) {
   if (profile.experiences.length >= 2) score += 7;
   if (profile.skills.length >= 3) score += 6;
   if (profile.monthlyBudget < 500 && track === "further_study") score -= 5;
-  if (profile.weeklyHours < 8 && track !== "employment") score -= 8;
+  if (profile.weeklyHours > 0 && profile.weeklyHours < 8 && track !== "employment") score -= 8;
   return Math.max(20, Math.min(88, score));
 }
 
@@ -213,7 +225,7 @@ export function generateDeterministicSimulations(
       terminalGoal: rule.terminalGoal,
       feasibility,
       readinessScore: score,
-      summary: `当前更适合先以${subtrack}做低成本验证，再根据30天证据决定是否持续投入。`,
+      summary: `当前更适合先以${subtrack}做低成本验证，再根据新的证据决定是否持续投入。`,
       majorObstacle: firstGap,
       totalTimeCost: rule.time,
       totalMoneyCost: rule.money,
