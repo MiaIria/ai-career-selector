@@ -8,24 +8,19 @@ datasource db {
 }
 
 model User {
-  id                String           @id @default(cuid())
-  feishuOpenId      String?          @unique
-  email             String?          @unique
-  phone             String?          @unique
-  passwordHash      String?
-  name              String?
-  avatarUrl         String?
-  accessToken       String?
-  refreshToken      String?
-  tokenExpiresAt    DateTime?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  profile           StudentProfile?
+  id                   String                   @id @default(cuid())
+  email                String?                  @unique
+  phone                String?                  @unique
+  passwordHash         String?
+  name                 String?
+  avatarUrl            String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  profile              StudentProfile?
   decisionSupportCache DecisionSupportCache?
-  simulationSnapshot PathSimulationSnapshot?
-  decision          DecisionRecord?
-  stagePlan         StagePlan?
-  feishuConnections FeishuResource[]
+  simulationSnapshot  PathSimulationSnapshot?
+  decision             DecisionRecord?
+  stagePlan            StagePlan?
 }
 
 model DecisionSupportCache {
@@ -100,16 +95,3 @@ model StagePlan {
   updatedAt DateTime @updatedAt
 }
 
-model FeishuResource {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  resourceType String
-  resourceKey  String
-  resourceId   String
-  metadata     Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@unique([userId, resourceType, resourceKey])
-}

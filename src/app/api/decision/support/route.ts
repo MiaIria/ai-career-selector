@@ -14,7 +14,7 @@ const CacheSchema = z.object({
 
 export async function GET() {
   const userId = await getSessionUserId();
-  if (!userId) return NextResponse.json({ error: "请先使用飞书登录" }, { status: 401 });
+  if (!userId) return NextResponse.json({ error: "请先登录" }, { status: 401 });
 
   const cache = await prisma.decisionSupportCache.findUnique({ where: { userId } });
   if (!cache) return NextResponse.json({ cache: null });

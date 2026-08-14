@@ -7,14 +7,13 @@ export async function GET() {
   if (!userId) return NextResponse.json({ authenticated: false });
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, avatarUrl: true, feishuOpenId: true, email: true, phone: true, passwordHash: true },
+    select: { id: true, name: true, avatarUrl: true, email: true, phone: true, passwordHash: true },
   });
-  // 飞书历史会话不再作为本地账号登录态使用；保留其数据库资料，但要求重新注册/登录。
   if (!user || !user.passwordHash) {
     await clearSession();
     return NextResponse.json({ authenticated: false });
   }
-  const safeUser = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, feishuOpenId: user.feishuOpenId, email: user.email, phone: user.phone };
+  const safeUser = { id: user.id, name: user.name, avatarUrl: user.avatarUrl, email: user.email, phone: user.phone };
   return NextResponse.json({ authenticated: true, user: safeUser });
 }
 
