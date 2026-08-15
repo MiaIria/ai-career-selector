@@ -6,7 +6,7 @@
 
 ## 在线体验
 
-[立即体验“路上见”](https://path-pilot-sigma.vercel.app)
+[立即体验“路上见”](https://pathpilot.taro.black)
 
 无需登录即可完成画像、辅助决策和路径推演；确认并保存选择、生成个人阶段方案时需要注册或登录。
 
