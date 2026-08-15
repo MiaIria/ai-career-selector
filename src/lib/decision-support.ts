@@ -66,6 +66,27 @@ function isRecommendationTie(first: DecisionPathResult | undefined, second: Deci
   return Boolean(first && second && Math.abs(first.percentage - second.percentage) <= 5);
 }
 
+/**
+ * 适配标签用于帮助用户比较同组可选路径，因此只比较彼此的原始累计得分占比，
+ * 不再拿每条路径各自不同的最高可得分作绝对阈值判断。
+ * 当有效路径的总分不为正时，直接按原始得分排序，避免负数分母反转排名。
+ */
+function applyRelativeFitLevels(results: MutableResult[], tiers: FitLevel[]) {
+  const eligible = results.filter((item) => !item.excluded);
+  const totalScore = eligible.reduce((sum, item) => sum + item.score, 0);
+  const ranked = eligible
+    .map((item) => ({ item, comparableScore: totalScore > 0 ? item.score / totalScore : item.score }))
+    .sort((a, b) => b.comparableScore - a.comparableScore);
+  const scoreTiers = [...new Set(ranked.map(({ comparableScore }) => comparableScore))];
+
+  ranked.forEach(({ item, comparableScore }) => {
+    const tier = scoreTiers.indexOf(comparableScore);
+    item.level = tiers[Math.min(tier, tiers.length - 1)];
+  });
+
+  return results;
+}
+
 export function buildDecisionSupport(profile: StudentProfileInput): DecisionSupportResult {
   const excluded = profile.questionnaire.excludedDirections;
   const study = createResult("further_study", "升学深造", "考研", 57, excluded.includes("考/保研"));
@@ -190,8 +211,8 @@ export function buildDecisionSupport(profile: StudentProfileInput): DecisionSupp
   if (has(feedback, "定期分享日常，记录生活")) add(content, "content-feedback", "愿意在低反馈期持续分享", 3);
   if (has(feedback, "通过 AI 不断尝试新的赚钱方式和项目类型")) add(opc, "opc-feedback", "愿意用 AI 持续试错项目", 3);
 
-  const primaryResults = (Object.values(primary) as MutableResult[]).map(finalize).sort((a, b) => b.percentage - a.percentage);
-  const sideResults = [content, opc].map(finalize).sort((a, b) => b.percentage - a.percentage);
+  const primaryResults = applyRelativeFitLevels((Object.values(primary) as MutableResult[]).map(finalize), ["high", "medium", "lower"]).sort((a, b) => b.percentage - a.percentage);
+  const sideResults = applyRelativeFitLevels([content, opc].map(finalize), ["high", "lower"]).sort((a, b) => b.percentage - a.percentage);
   const eligiblePrimary = primaryResults.filter((item) => !item.excluded);
   const forcedFurtherStudy = !study.excluded && gateOne && gateTwo;
   const recommendedPrimary = forcedFurtherStudy ? "further_study" : isRecommendationTie(eligiblePrimary[0], eligiblePrimary[1]) ? null : eligiblePrimary[0]?.key as PrimaryTrackKey | undefined ?? null;
